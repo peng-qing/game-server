@@ -79,7 +79,7 @@ func (gs *LogLevel) unmarshalText(text []byte) bool {
 }
 
 // LowCaseString 小写字母形式
-// 也可以采用数组的方式 从0开始对应哥哥级别的下标字符串
+// 也可以采用数组的方式 从0开始对应各个级别的下标字符串
 func (gs LogLevel) LowCaseString() string {
 	switch gs {
 	case TraceLevel:
