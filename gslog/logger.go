@@ -39,9 +39,9 @@ func (gs *Logger) Log(level LogLevel, format string, args ...any) {
 	var msg string
 	if len(format) > 0 {
 		if format[len(format)-1] != '\n' {
-			msg = fmt.Sprintln(format, args)
+			msg = fmt.Sprintf(format, args...)
 		} else {
-			msg = fmt.Sprintf(format, args)
+			msg = fmt.Sprintf(format, args...)
 		}
 	}
 
@@ -128,27 +128,27 @@ func (gs *Logger) Log(level LogLevel, format string, args ...any) {
 }
 
 func (gs *Logger) Trace(format string, args ...any) {
-	gs.Log(TraceLevel, format, args)
+	gs.Log(TraceLevel, format, args...)
 }
 
 func (gs *Logger) Debug(format string, args ...any) {
-	gs.Log(DebugLevel, format, args)
+	gs.Log(DebugLevel, format, args...)
 
 }
 
 func (gs *Logger) Info(format string, args ...any) {
-	gs.Log(InfoLevel, format, args)
+	gs.Log(InfoLevel, format, args...)
 
 }
 
 func (gs *Logger) Warn(format string, args ...any) {
-	gs.Log(WarnLevel, format, args)
+	gs.Log(WarnLevel, format, args...)
 
 }
 func (gs *Logger) Error(format string, args ...any) {
-	gs.Log(ErrorLevel, format, args)
+	gs.Log(ErrorLevel, format, args...)
 
 }
 func (gs *Logger) Critical(format string, args ...any) {
-	gs.Log(CriticalLevel, format, args)
+	gs.Log(CriticalLevel, format, args...)
 }
