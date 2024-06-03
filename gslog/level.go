@@ -80,8 +80,8 @@ func (gs *LogLevel) unmarshalText(text []byte) bool {
 
 // LowCaseString 小写字母形式
 // 也可以采用数组的方式 从0开始对应哥哥级别的下标字符串
-func (gs *LogLevel) LowCaseString() string {
-	switch *gs {
+func (gs LogLevel) LowCaseString() string {
+	switch gs {
 	case TraceLevel:
 		return "trace"
 	case DebugLevel:
@@ -100,8 +100,8 @@ func (gs *LogLevel) LowCaseString() string {
 }
 
 // UpCaseString 大写字母形式
-func (gs *LogLevel) UpCaseString() string {
-	switch *gs {
+func (gs LogLevel) UpCaseString() string {
+	switch gs {
 	case TraceLevel:
 		return "TRACE"
 	case DebugLevel:
@@ -120,8 +120,8 @@ func (gs *LogLevel) UpCaseString() string {
 }
 
 // CapitalString 首字母大写形式
-func (gs *LogLevel) CapitalString() string {
-	switch *gs {
+func (gs LogLevel) CapitalString() string {
+	switch gs {
 	case TraceLevel:
 		return "Trace"
 	case DebugLevel:
@@ -139,13 +139,13 @@ func (gs *LogLevel) CapitalString() string {
 	}
 }
 
-func (gs *LogLevel) Enabled(level LogLevel) bool {
+func (gs LogLevel) Enabled(level LogLevel) bool {
 	if level < _minLevel || level > _maxLevel {
 		return false
 	}
-	return level >= *gs
+	return level >= gs
 }
 
-func (gs *LogLevel) Level() LogLevel {
-	return *gs
+func (gs LogLevel) Level() LogLevel {
+	return gs
 }
