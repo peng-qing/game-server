@@ -1,6 +1,7 @@
 package gslog
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type LogEntry struct {
 	// 来自Logger的信息
 	Prefix     string
 	FormatFlag int
+	LogLevel   LogLevel
 	// 日志元数据
 	File     string
 	Line     int
@@ -33,8 +35,65 @@ type LogEntry struct {
 	Message  string
 }
 
-//func (gs *LogEntry) Format() []byte {
-//
+func formatLogEntry(entry *LogEntry) []byte {
+	buffer := Get()
+	defer buffer.Free()
+	if entry == nil {
+		return buffer.Bytes()
+	}
+	if entry.Prefix != "" {
+		_, _ = buffer.WriteString(fmt.Sprintf("<%s> ", entry.Prefix))
+		// <prefix>
+	}
+	if entry.FormatFlag&BitDate != 0 {
+		year, month, day := entry.CreateAt.Date()
+		_, _ = buffer.WriteString(fmt.Sprintf("%04d/%02d/%02d ", year, month, day))
+		// <prefix> 2024/06/01
+	}
+	if entry.FormatFlag&BitTime != 0 {
+		hour, minute, second := entry.CreateAt.Clock()
+		_, _ = buffer.WriteString(fmt.Sprintf("%02d:%02d:%02d", hour, minute, second))
+		// <prefix> 2024/06/01 00:00:00
+	}
+	if entry.FormatFlag&BitMicroSeconds != 0 {
+		microSeconds := entry.CreateAt.Nanosecond() / 1000
+		_, _ = buffer.WriteString(fmt.Sprintf(".%06d ", microSeconds))
+		// <prefix> 2024/06/01 00:00:00.000000
+	}
+	if entry.FormatFlag&(BitLogLevel|BitLogLevelUpCase|BitLogLevelLowCase) != 0 {
+		if entry.FormatFlag&(BitLogLevelUpCase|BitLogLevelLowCase) == 0 {
+			_, _ = buffer.WriteString(fmt.Sprintf("[%s] ", entry.LogLevel.CapitalString()))
+		} else {
+			if entry.FormatFlag&BitLogLevelUpCase != 0 {
+				_, _ = buffer.WriteString(fmt.Sprintf("[%s] ", entry.LogLevel.UpCaseString()))
+			} else {
+				_, _ = buffer.WriteString(fmt.Sprintf("[%s] ", entry.LogLevel.LowCaseString()))
+			}
+		}
+		// <prefix> 2024/06/01 00:00:00.000000 [Info]
+	}
+	if entry.FormatFlag&(BitShortFile|BitFullPath) != 0 {
+		var file string
+		if entry.FormatFlag&BitShortFile != 0 {
+			for i := len(entry.File) - 1; i >= 0; i-- {
+				if entry.File[i] == '/' {
+					file = entry.File[i+1:]
+					break
+				}
+			}
+		} else {
+			file = entry.File
+		}
+		_, _ = buffer.WriteString(fmt.Sprintf("%s:%d", file, entry.Line))
+		// <prefix> 2024/06/01 00:00:00.000000 [Info] file:line
+	}
+
+	return buffer.Bytes()
+}
+
+//gs.mu.Lock()
+//defer gs.mu.Unlock()
+// 不在这格式化 丢给写的时候格式化
 //if gs.formatFlag&(BitFullPath|BitShortFile) != 0 {
 //	// 需要输出文件信息
 //	var ok bool
@@ -88,4 +147,8 @@ type LogEntry struct {
 //	_, _ = buffer.WriteString(fmt.Sprintf("%s:%d  ", file, line))
 //	// <prefix> 2024/06/01 00:00:00.000000 [Info] file:line
 //}
-//}
+
+//gs.encoder.EncoderEntry(level, format, args)
+////for _, syncer := range gs.writeSyncers {
+////	//syncer.Write()
+////}
