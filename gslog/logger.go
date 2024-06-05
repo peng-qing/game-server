@@ -14,8 +14,7 @@ import (
 // 3. 日志输出路径(console/file/network)
 
 var (
-	_calledPath          = 2
-	_defaultLevelEnabler = InfoLevel
+	_defaultLevelEnabler = DebugLevel
 )
 
 // Logger 日志器
@@ -23,19 +22,22 @@ var (
 // 存在的几个问题:
 // 1. 没办法处理结构化日志
 // 2. 对于每个WriteSyncer抽象的不好，比如对于每个WriteSyncer应该有独立Enabler来区分写入
+// 3. 对于WriteSyncer采用了异步写，导致目前没有没有适合的办法保证主线程退出时子线程一定执行完 会丢失日志
 type Logger struct {
 	enabler      LevelEnabler
 	writeSyncers map[string]WriteSyncer
 
-	mutex  sync.Mutex
-	flag   atomic.Int32
-	prefix atomic.Pointer[string]
+	mutex      sync.Mutex
+	flag       atomic.Int32
+	prefix     atomic.Pointer[string]
+	calledPath int
 }
 
 func NewLogger(options ...Option) *Logger {
 	gs := &Logger{
 		enabler:      _defaultLevelEnabler,
 		writeSyncers: make(map[string]WriteSyncer),
+		calledPath:   2,
 	}
 	gs.SetFlags(BitDefaultStdSourceFlag)
 
@@ -88,29 +90,29 @@ func (gs *Logger) Log(level LogLevel, calledPath int, format string, args ...any
 }
 
 func (gs *Logger) Trace(format string, args ...any) {
-	gs.Log(TraceLevel, _calledPath, format, args...)
+	gs.Log(TraceLevel, gs.calledPath, format, args...)
 }
 
 func (gs *Logger) Debug(format string, args ...any) {
-	gs.Log(DebugLevel, _calledPath, format, args...)
+	gs.Log(DebugLevel, gs.calledPath, format, args...)
 
 }
 
 func (gs *Logger) Info(format string, args ...any) {
-	gs.Log(InfoLevel, _calledPath, format, args...)
+	gs.Log(InfoLevel, gs.calledPath, format, args...)
 
 }
 
 func (gs *Logger) Warn(format string, args ...any) {
-	gs.Log(WarnLevel, _calledPath, format, args...)
+	gs.Log(WarnLevel, gs.calledPath, format, args...)
 
 }
 func (gs *Logger) Error(format string, args ...any) {
-	gs.Log(ErrorLevel, _calledPath, format, args...)
+	gs.Log(ErrorLevel, gs.calledPath, format, args...)
 
 }
 func (gs *Logger) Critical(format string, args ...any) {
-	gs.Log(CriticalLevel, _calledPath, format, args...)
+	gs.Log(CriticalLevel, gs.calledPath, format, args...)
 }
 
 func (gs *Logger) Prefix() string {
@@ -187,4 +189,47 @@ func (gs *Logger) Close() error {
 	}
 
 	return nil
+}
+
+var (
+	_once           sync.Once
+	_defaultLogger  *Logger
+	_stdWriteSyncer = "console"
+)
+
+func init() {
+	_once.Do(func() {
+		_defaultLogger = NewLogger(WithWriteSyncer(_stdWriteSyncer, NewStdWriteSyncer()))
+		_defaultLogger.calledPath = 3
+
+		runtime.SetFinalizer(_defaultLogger, func(l *Logger) {
+			l.Close()
+		})
+	})
+}
+
+func Default() *Logger {
+	return _defaultLogger
+}
+
+func Trace(format string, args ...any) {
+	Default().Trace(format, args...)
+}
+
+func Debug(format string, args ...any) {
+	Default().Debug(format, args...)
+}
+
+func Info(format string, args ...any) {
+	Default().Info(format, args...)
+}
+
+func Warn(format string, args ...any) {
+	Default().Warn(format, args...)
+}
+func Error(format string, args ...any) {
+	Default().Error(format, args...)
+}
+func Critical(format string, args ...any) {
+	Default().Critical(format, args...)
 }

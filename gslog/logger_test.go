@@ -130,3 +130,12 @@ func TestFileLogger(t *testing.T) {
 		time.Sleep(time.Millisecond * 100)
 	}
 }
+
+func TestDefaultLogger(t *testing.T) {
+	Trace("test %d", 1)
+	Debug("Test %d", 2)
+	Info("Test %d", 3)
+	Warn("Test %d", 4)
+	Error("Test %d", 5)
+	Critical("Test %d", 6)
+}

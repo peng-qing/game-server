@@ -16,10 +16,6 @@ type WriteSyncer interface {
 	Close() error
 }
 
-const (
-	_defaultChanSize = 128
-)
-
 type WriteFunc func(p []byte) (n int, err error)
 
 type baseWriteSyncer struct {
@@ -32,7 +28,7 @@ type baseWriteSyncer struct {
 
 func newBaseWriteSyncer(writeFunc WriteFunc) *baseWriteSyncer {
 	gs := &baseWriteSyncer{
-		recChan:   make(chan *LogEntry, _defaultChanSize),
+		recChan:   make(chan *LogEntry),
 		closeChan: make(chan struct{}),
 		writeFunc: writeFunc,
 	}
@@ -148,6 +144,7 @@ func (gs *FileWriteSyncer) Write(p []byte) (n int, err error) {
 
 func (gs *FileWriteSyncer) Close() error {
 	_ = gs.baseWriteSyncer.Close()
+	_ = gs.file.Sync()
 	_ = gs.file.Close()
 
 	return nil
