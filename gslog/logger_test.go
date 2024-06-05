@@ -1,7 +1,6 @@
 package gslog
 
 import (
-	"os"
 	"testing"
 	"time"
 )
@@ -123,11 +122,7 @@ func TestStdLogger(t *testing.T) {
 }
 
 func TestFileLogger(t *testing.T) {
-	file, err := os.OpenFile("./example.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0664)
-	if err != nil {
-		return
-	}
-	logger := NewLogger(WithWriteSyncer("file", NewFileWriteSyncer(file)), WithLevelEnabler(TraceLevel))
+	logger := NewLogger(WithWriteSyncer("file", NewFileWriteSyncer("./example.log")), WithLevelEnabler(TraceLevel))
 	defer logger.Close()
 
 	for i := 0; i < 20; i++ {

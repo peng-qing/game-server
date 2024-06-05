@@ -128,7 +128,11 @@ type FileWriteSyncer struct {
 	*baseWriteSyncer
 }
 
-func NewFileWriteSyncer(file *os.File) *FileWriteSyncer {
+func NewFileWriteSyncer(fileName string) *FileWriteSyncer {
+	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0664)
+	if err != nil {
+		return nil
+	}
 	gs := &FileWriteSyncer{
 		file: file,
 	}
