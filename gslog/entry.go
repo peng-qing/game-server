@@ -84,9 +84,10 @@ func formatLogEntry(entry *LogEntry) []byte {
 		} else {
 			file = entry.File
 		}
-		_, _ = buffer.WriteString(fmt.Sprintf("%s:%d", file, entry.Line))
+		_, _ = buffer.WriteString(fmt.Sprintf("%s:%d ", file, entry.Line))
 		// <prefix> 2024/06/01 00:00:00.000000 [Info] file:line
 	}
+	_, _ = buffer.WriteString(entry.Message)
 
 	return buffer.Bytes()
 }

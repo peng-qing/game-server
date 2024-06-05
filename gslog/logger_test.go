@@ -1,7 +1,9 @@
 package gslog
 
 import (
+	"os"
 	"testing"
+	"time"
 )
 
 func TestLogLevelUnmarshal(t *testing.T) {
@@ -107,5 +109,29 @@ func TestLogLevelUnmarshal(t *testing.T) {
 				t.Errorf("ParseLogLevel error = %v, wantE = %v, get = %v", err, tt.want, lv)
 			}
 		})
+	}
+}
+
+func TestStdLogger(t *testing.T) {
+	logger := NewLogger(WithWriteSyncer("console", NewStdWriteSyncer()), WithLevelEnabler(TraceLevel))
+	defer logger.Close()
+
+	for i := 0; i < 20; i++ {
+		logger.Debug("test %d", i)
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+func TestFileLogger(t *testing.T) {
+	file, err := os.OpenFile("./example.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0664)
+	if err != nil {
+		return
+	}
+	logger := NewLogger(WithWriteSyncer("file", NewFileWriteSyncer(file)), WithLevelEnabler(TraceLevel))
+	defer logger.Close()
+
+	for i := 0; i < 20; i++ {
+		logger.Debug("test %d", i)
+		time.Sleep(time.Millisecond * 100)
 	}
 }

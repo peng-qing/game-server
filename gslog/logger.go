@@ -14,9 +14,15 @@ import (
 // 3. 日志输出路径(console/file/network)
 
 var (
-	_calledPath = 2
+	_calledPath          = 2
+	_defaultLevelEnabler = InfoLevel
 )
 
+// Logger 日志器
+// 这一版写的不好 后续找机会重构掉
+// 存在的几个问题:
+// 1. 没办法处理结构化日志
+// 2. 对于每个WriteSyncer抽象的不好，比如对于每个WriteSyncer应该有独立Enabler来区分写入
 type Logger struct {
 	enabler      LevelEnabler
 	writeSyncers map[string]WriteSyncer
@@ -27,7 +33,11 @@ type Logger struct {
 }
 
 func NewLogger(options ...Option) *Logger {
-	gs := &Logger{}
+	gs := &Logger{
+		enabler:      _defaultLevelEnabler,
+		writeSyncers: make(map[string]WriteSyncer),
+	}
+	gs.SetFlags(BitDefaultStdSourceFlag)
 
 	for _, option := range options {
 		option.apply(gs)
@@ -47,6 +57,7 @@ func (gs *Logger) Log(level LogLevel, calledPath int, format string, args ...any
 	var msg string
 	if len(format) > 0 {
 		if format[len(format)-1] != '\n' {
+			format += "\n"
 			msg = fmt.Sprintf(format, args...)
 		} else {
 			msg = fmt.Sprintf(format, args...)
@@ -62,16 +73,18 @@ func (gs *Logger) Log(level LogLevel, calledPath int, format string, args ...any
 	entry := &LogEntry{
 		Prefix:     gs.Prefix(),
 		FormatFlag: gs.Flags(),
-		LogLevel:   gs.Level(),
+		LogLevel:   level,
 		File:       file,
 		Line:       line,
 		CreateAt:   now,
 		Message:    msg,
 	}
 
+	gs.mutex.Lock()
 	for _, writeSyncer := range gs.writeSyncers {
 		writeSyncer.Sync(entry)
 	}
+	gs.mutex.Unlock()
 }
 
 func (gs *Logger) Trace(format string, args ...any) {
@@ -142,13 +155,14 @@ func (gs *Logger) AppendWriteSyncer(name string, writeSyncer WriteSyncer) {
 
 func (gs *Logger) RemoveWriteSyncer(name string) {
 	gs.mutex.Lock()
-	defer gs.mutex.Unlock()
 
 	writeSyncer, ok := gs.writeSyncers[name]
 	if !ok {
 		return
 	}
 	delete(gs.writeSyncers, name)
+	gs.mutex.Unlock()
+
 	_ = writeSyncer.Close()
 }
 
@@ -162,4 +176,15 @@ func (gs *Logger) AllWriteSyncers() []string {
 	}
 
 	return res
+}
+
+func (gs *Logger) Close() error {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+
+	for _, writeSyncer := range gs.writeSyncers {
+		_ = writeSyncer.Close()
+	}
+
+	return nil
 }

@@ -24,7 +24,7 @@ type LevelEnabler interface {
 type LogLevel int8
 
 const (
-	TraceLevel = iota
+	TraceLevel LogLevel = iota
 	DebugLevel
 	InfoLevel
 	WarnLevel
