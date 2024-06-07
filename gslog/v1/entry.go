@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"GameServer/gslog"
 	"fmt"
 	"time"
 )
@@ -36,7 +37,7 @@ type LogEntry struct {
 }
 
 func formatLogEntry(entry *LogEntry) []byte {
-	buffer := Get()
+	buffer := gslog.Get()
 	defer buffer.Free()
 	if entry == nil {
 		return buffer.Bytes()

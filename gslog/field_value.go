@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -268,9 +269,7 @@ func (gs FieldValue) String() string {
 	}
 
 	buffer := make([]byte, 0)
-	gs.append(buffer)
-
-	return string(buffer)
+	return string(gs.append(buffer))
 }
 
 func (gs FieldValue) Strings() []string {
@@ -349,25 +348,144 @@ func (gs FieldValue) append(dst []byte) []byte {
 	case FieldValueKindString:
 		return append(dst, gs.value.(string)...)
 	case FieldValueKindError:
-		return append(dst, gs.value.(error).Error()...)
+		return append(dst, fmt.Sprintf("err: %s", gs.value.(error).Error())...)
 	case FieldValueKindAny:
-		fallthrough
+		return fmt.Append(dst, gs.value)
 	case FieldValueKindField:
-		fallthrough
+		return fmt.Append(dst, gs.value)
 	case FieldValueKindFields:
-		fallthrough
+		return append(dst, gs.serializeFields()...)
 	case FieldValueKindInt64s:
-		fallthrough
+		return append(dst, gs.serializeInt64s()...)
 	case FieldValueKindUint64s:
-		fallthrough
+		return append(dst, gs.serializeUint64s()...)
 	case FieldValueKindFloat64s:
-		fallthrough
+		return append(dst, gs.serializeFloat64s()...)
 	case FieldValueKindStrings:
-		fallthrough
+		return append(dst, gs.serializeStrings()...)
 	case FieldValueKindBools:
-		fmt.Append(dst, gs.value)
+		return append(dst, gs.serializeBools()...)
 	default:
 		panic(fmt.Sprintf("Invalid FieldValueKind %s", kindString[gs.Kind()]))
 	}
 	return dst
+}
+
+func (gs FieldValue) serializeFields() []byte {
+	var buffer []byte
+	fields, ok := gs.value.([]Field)
+	if !ok {
+		return buffer
+	}
+	buffer = append(buffer, SerializeArrayBegin)
+	for idx, field := range fields {
+		if idx > 0 {
+			buffer = append(buffer, SerializeArrayStep)
+		}
+		buffer = fmt.Append(buffer, field)
+	}
+	return append(buffer, SerializeArrayEnd)
+}
+
+func (gs FieldValue) serializeInt64s() []byte {
+	buffer := Get()
+	defer buffer.Free()
+
+	nums, ok := gs.value.([]int64)
+	if !ok {
+		return buffer.Bytes()
+	}
+	buffer.AppendByte(SerializeArrayBegin)
+	for idx, num := range nums {
+		if idx > 0 {
+			buffer.AppendByte(SerializeArrayStep)
+		}
+		buffer.AppendInt(num)
+	}
+	buffer.AppendByte(SerializeArrayEnd)
+
+	return buffer.Bytes()
+}
+
+func (gs FieldValue) serializeUint64s() []byte {
+	buffer := Get()
+	defer buffer.Free()
+
+	nums, ok := gs.value.([]uint64)
+	if !ok {
+		return buffer.Bytes()
+	}
+
+	buffer.AppendByte(SerializeArrayBegin)
+	for idx, num := range nums {
+		if idx > 0 {
+			buffer.AppendByte(SerializeArrayStep)
+		}
+		buffer.AppendUint(num)
+	}
+	buffer.AppendByte(SerializeArrayEnd)
+
+	return buffer.Bytes()
+}
+
+func (gs FieldValue) serializeFloat64s() []byte {
+	buffer := Get()
+	defer buffer.Free()
+
+	nums, ok := gs.value.([]float64)
+	if !ok {
+		return buffer.Bytes()
+	}
+
+	buffer.AppendByte(SerializeArrayBegin)
+	for idx, num := range nums {
+		if idx > 0 {
+			buffer.AppendByte(SerializeArrayStep)
+		}
+		buffer.AppendFloat(num, 64)
+	}
+	buffer.AppendByte(SerializeArrayEnd)
+
+	return buffer.Bytes()
+}
+
+// string 可以使用 strings.Builder 构建
+func (gs FieldValue) serializeStrings() []byte {
+	var builder strings.Builder
+	strs, ok := gs.value.([]string)
+	if !ok {
+		return nil
+	}
+
+	builder.WriteByte(SerializeArrayBegin)
+	for idx, str := range strs {
+		if idx > 0 {
+			builder.WriteByte(SerializeArrayStep)
+		}
+		builder.WriteString(str)
+	}
+	builder.WriteByte(SerializeArrayEnd)
+
+	return []byte(builder.String())
+}
+
+func (gs FieldValue) serializeBools() []byte {
+	buffer := Get()
+	defer buffer.Free()
+
+	bools, ok := gs.value.([]bool)
+	if !ok {
+		return nil
+	}
+
+	buffer.AppendByte(SerializeArrayBegin)
+	for idx, boolVal := range bools {
+		if idx > 0 {
+			buffer.AppendByte(SerializeArrayStep)
+		}
+		buffer.AppendBool(boolVal)
+	}
+	buffer.AppendByte(SerializeArrayEnd)
+
+	return buffer.Bytes()
 }
