@@ -2,6 +2,7 @@ package gslog
 
 import (
 	"GameServer/utils"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -33,23 +34,25 @@ const (
 	FieldValueKindDuration
 	FieldValueKindField
 	FieldValueKindFields
+	FieldValueKindError
 )
 
 var kindString = map[FieldValueKind]string{
 	FieldValueKindAny:      "Any",
 	FieldValueKindInt64:    "Int64",
-	FieldValueKindInt64s:   "Int64Array",
+	FieldValueKindInt64s:   "Int64s",
 	FieldValueKindUint64:   "Uint64",
-	FieldValueKindUint64s:  "Uint64Array",
+	FieldValueKindUint64s:  "Uint64s",
 	FieldValueKindFloat64:  "Float64",
-	FieldValueKindFloat64s: "Float64Array",
+	FieldValueKindFloat64s: "Float64s",
 	FieldValueKindString:   "String",
 	FieldValueKindBool:     "Bool",
-	FieldValueKindBools:    "BoolArray",
+	FieldValueKindBools:    "Bools",
 	FieldValueKindTime:     "Time",
 	FieldValueKindDuration: "Duration",
 	FieldValueKindField:    "Field",
-	FieldValueKindFields:   "FieldArray",
+	FieldValueKindFields:   "Fields",
+	FieldValueKindError:    "Error",
 }
 
 func (gs FieldValueKind) String() string {
@@ -133,6 +136,10 @@ func FieldArrayFieldValue(val ...Field) FieldValue {
 	return FieldValue{kind: FieldValueKindFields, value: val}
 }
 
+func ErrorFieldValue(errs ...error) FieldValue {
+	return FieldValue{kind: FieldValueKindError, value: errors.Join(errs...)}
+}
+
 func AnyFieldValue(val any) FieldValue {
 	switch vv := val.(type) {
 	case int:
@@ -199,6 +206,8 @@ func AnyFieldValue(val any) FieldValue {
 		return FieldFieldValue(vv)
 	case []Field:
 		return FieldArrayFieldValue(vv...)
+	case error:
+		return ErrorFieldValue(vv)
 	default:
 		return FieldValue{kind: FieldValueKindAny, value: val}
 	}
@@ -258,9 +267,8 @@ func (gs FieldValue) String() string {
 		return gs.value.(string)
 	}
 
-	// TODO 优化根据类型处理
 	buffer := make([]byte, 0)
-	fmt.Append(buffer, gs.value)
+	gs.append(buffer)
 
 	return string(buffer)
 }
@@ -314,13 +322,18 @@ func (gs FieldValue) Fields() []Field {
 	return gs.value.([]Field)
 }
 
+func (gs FieldValue) Error() error {
+	if current, target := gs.Kind(), FieldValueKindError; current != target {
+		panic(fmt.Sprintf("current FieldValueKind is %s, not %s", kindString[current], kindString[target]))
+	}
+	return gs.value.(error)
+}
+
 ////////// internal
 
 // format to dst... like fmt.Sprint
 func (gs FieldValue) append(dst []byte) []byte {
 	switch gs.Kind() {
-	case FieldValueKindAny:
-		fmt.Append(dst, gs.value)
 	case FieldValueKindInt64:
 		strconv.AppendInt(dst, gs.value.(int64), 10)
 	case FieldValueKindUint64:
@@ -333,13 +346,26 @@ func (gs FieldValue) append(dst []byte) []byte {
 		return append(dst, gs.value.(time.Time).String()...)
 	case FieldValueKindDuration:
 		return append(dst, gs.value.(time.Duration).String()...)
+	case FieldValueKindString:
+		return append(dst, gs.value.(string)...)
+	case FieldValueKindError:
+		return append(dst, gs.value.(error).Error()...)
+	case FieldValueKindAny:
+		fallthrough
 	case FieldValueKindField:
+		fallthrough
 	case FieldValueKindFields:
+		fallthrough
 	case FieldValueKindInt64s:
+		fallthrough
 	case FieldValueKindUint64s:
+		fallthrough
 	case FieldValueKindFloat64s:
+		fallthrough
 	case FieldValueKindStrings:
+		fallthrough
 	case FieldValueKindBools:
+		fmt.Append(dst, gs.value)
 	default:
 		panic(fmt.Sprintf("Invalid FieldValueKind %s", kindString[gs.Kind()]))
 	}
