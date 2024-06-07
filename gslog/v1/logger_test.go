@@ -1,4 +1,4 @@
-package gslog
+package v1
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package gslog
+package v1
 
 import (
 	"bytes"
@@ -6,22 +6,36 @@ import (
 	"fmt"
 )
 
-// LogLevel 日志级别有了部分调整
-// 1. 默认DebugLevel 为0，保持默认级别为int默认值
-
 var (
-	errUnmarshalInvalid = errors.New("unmarshal invalid text")
+	errUnmarshalNilPointer = errors.New("unmarshal text to nil LogLevel pointer")
+	errUnmarshalInvalid    = errors.New("unmarshal invalid text")
 )
 
-type LogLevel int
+var (
+	_ LevelEnabler = (*LogLevel)(nil)
+)
+
+// LevelEnabler 用于判断日志级别是否开启
+type LevelEnabler interface {
+	Enabled(level LogLevel) bool
+	Level() LogLevel
+}
+
+type LogLevel int8
 
 const (
-	TraceLevel LogLevel = iota - 1
+	TraceLevel LogLevel = iota
 	DebugLevel
 	InfoLevel
 	WarnLevel
 	ErrorLevel
 	CriticalLevel
+
+	_minLevel = TraceLevel
+	_maxLevel = CriticalLevel
+
+	// InvalidLevel 无效值
+	InvalidLevel = TraceLevel - 1
 )
 
 // ParseLogLevel 解析字符串到LogLevel
@@ -33,7 +47,11 @@ func ParseLogLevel(text string) (LogLevel, error) {
 }
 
 // UnmarshalText 解析文本为指定日志级别
-func (gs LogLevel) UnmarshalText(text []byte) error {
+func (gs *LogLevel) UnmarshalText(text []byte) error {
+	if gs == nil {
+		// 指针接收器 有可能空
+		return errUnmarshalNilPointer
+	}
 	if !gs.unmarshalText(text) && !gs.unmarshalText(bytes.ToUpper(text)) {
 		return errUnmarshalInvalid
 	}
@@ -121,11 +139,13 @@ func (gs LogLevel) CapitalString() string {
 	}
 }
 
-// LevelEnabler 支持通过LevelEnabler接口来处理划分更多详细的日志信息
-type LevelEnabler interface {
-	Enabled(LogLevel) bool
+func (gs LogLevel) Enabled(level LogLevel) bool {
+	if level < _minLevel || level > _maxLevel {
+		return false
+	}
+	return level >= gs
 }
 
-func (gs LogLevel) Enabled(level LogLevel) bool {
-	return level >= gs
+func (gs LogLevel) Level() LogLevel {
+	return gs
 }

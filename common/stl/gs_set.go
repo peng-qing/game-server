@@ -1,20 +1,22 @@
 package stl
 
+import "GameServer/types"
+
 // Set 集合
 type Set[T comparable] struct {
-	set map[T]None
+	set map[T]types.None
 }
 
 // NewSet 返回一个集合
 func NewSet[T comparable]() *Set[T] {
 	return &Set[T]{
-		set: make(map[T]None),
+		set: make(map[T]types.None),
 	}
 }
 
 // Clear 清空所有元素
 func (gs *Set[T]) Clear() {
-	gs.set = make(map[T]None)
+	gs.set = make(map[T]types.None)
 }
 
 // IsEmpty 集合是否为空
@@ -35,7 +37,7 @@ func (gs *Set[T]) Del(e T) {
 
 // Insert 插入元素
 func (gs *Set[T]) Insert(e T) {
-	gs.set[e] = None{}
+	gs.set[e] = types.None{}
 }
 
 // Size 集合大小

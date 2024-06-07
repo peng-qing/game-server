@@ -1,4 +1,4 @@
-package gslog
+package v1
 
 // Option options模式
 type Option interface {
