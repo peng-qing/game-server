@@ -334,13 +334,13 @@ func (gs FieldValue) Error() error {
 func (gs FieldValue) append(dst []byte) []byte {
 	switch gs.Kind() {
 	case FieldValueKindInt64:
-		strconv.AppendInt(dst, gs.value.(int64), 10)
+		return strconv.AppendInt(dst, gs.value.(int64), 10)
 	case FieldValueKindUint64:
-		strconv.AppendUint(dst, gs.value.(uint64), 10)
+		return strconv.AppendUint(dst, gs.value.(uint64), 10)
 	case FieldValueKindFloat64:
-		strconv.AppendFloat(dst, gs.value.(float64), 'f', -1, 64)
+		return strconv.AppendFloat(dst, gs.value.(float64), 'f', -1, 64)
 	case FieldValueKindBool:
-		strconv.AppendBool(dst, gs.value.(bool))
+		return strconv.AppendBool(dst, gs.value.(bool))
 	case FieldValueKindTime:
 		return append(dst, gs.value.(time.Time).String()...)
 	case FieldValueKindDuration:
