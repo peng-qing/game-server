@@ -1,7 +1,5 @@
 package types
 
-import "cmp"
-
 type None struct{}
 
 type Integer interface {
@@ -37,7 +35,6 @@ type Complex interface {
 
 type Bool interface {
 	~bool
-	cmp.Ordered
 }
 
 type Pointer interface {

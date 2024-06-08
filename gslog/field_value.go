@@ -269,7 +269,7 @@ func (gs FieldValue) String() string {
 	}
 
 	buffer := make([]byte, 0)
-	return string(gs.append(buffer))
+	return string(gs.appendFieldValue(buffer))
 }
 
 func (gs FieldValue) Strings() []string {
@@ -331,7 +331,7 @@ func (gs FieldValue) Error() error {
 ////////// internal
 
 // format to dst... like fmt.Sprint
-func (gs FieldValue) append(dst []byte) []byte {
+func (gs FieldValue) appendFieldValue(dst []byte) []byte {
 	switch gs.Kind() {
 	case FieldValueKindInt64:
 		return strconv.AppendInt(dst, gs.value.(int64), 10)
