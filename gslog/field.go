@@ -84,3 +84,21 @@ func Any(key string, val any) Field {
 		Value: AnyFieldValue(val),
 	}
 }
+
+////////// Accessors
+
+////////// internal
+
+func argsToFields(args ...any) (Field, []any) {
+	switch v := args[0].(type) {
+	case Field:
+		return v, args[1:]
+	case string:
+		if len(args) == 1 {
+			return Sting[string](badFieldsKey, v), nil
+		}
+		return Any(v, args[1]), args[2:]
+	default:
+		return Any(badFieldsKey, v), args[1:]
+	}
+}

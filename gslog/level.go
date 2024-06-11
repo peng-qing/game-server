@@ -7,7 +7,7 @@ import (
 )
 
 // LogLevel 日志级别有了部分调整
-// 1. 默认DebugLevel 为0，保持默认级别为int默认值
+// 1. 默认TraceLevel 为0，保持默认级别为int默认值
 
 var (
 	errUnmarshalInvalid = errors.New("unmarshal invalid text")
@@ -16,7 +16,7 @@ var (
 type LogLevel int
 
 const (
-	TraceLevel LogLevel = iota - 1
+	TraceLevel LogLevel = iota << 2
 	DebugLevel
 	InfoLevel
 	WarnLevel
@@ -124,8 +124,13 @@ func (gs LogLevel) CapitalString() string {
 // LevelEnabler 支持通过LevelEnabler接口来处理划分更多详细的日志信息
 type LevelEnabler interface {
 	Enabled(LogLevel) bool
+	Level() LogLevel
 }
 
 func (gs LogLevel) Enabled(level LogLevel) bool {
 	return level >= gs
+}
+
+func (gs LogLevel) Level() LogLevel {
+	return gs
 }
