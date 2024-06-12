@@ -21,23 +21,23 @@ func (gs *Logger) Trace(msg string, args ...any) {
 }
 
 func (gs *Logger) Debug(msg string, args ...any) {
-	gs.log(context.Background(), TraceLevel, msg, args...)
+	gs.log(context.Background(), DebugLevel, msg, args...)
 }
 
 func (gs *Logger) Info(msg string, args ...any) {
-	gs.log(context.Background(), TraceLevel, msg, args...)
+	gs.log(context.Background(), InfoLevel, msg, args...)
 }
 
 func (gs *Logger) Warn(msg string, args ...any) {
-	gs.log(context.Background(), TraceLevel, msg, args...)
+	gs.log(context.Background(), WarnLevel, msg, args...)
 }
 
 func (gs *Logger) Error(msg string, args ...any) {
-	gs.log(context.Background(), TraceLevel, msg, args...)
+	gs.log(context.Background(), ErrorLevel, msg, args...)
 }
 
 func (gs *Logger) Critical(msg string, args ...any) {
-	gs.log(context.Background(), TraceLevel, msg, args...)
+	gs.log(context.Background(), CriticalLevel, msg, args...)
 }
 
 func (gs *Logger) TraceContext(ctx context.Context, msg string, args ...any) {
@@ -64,8 +64,8 @@ func (gs *Logger) CriticalContext(ctx context.Context, msg string, args ...any) 
 	gs.log(ctx, CriticalLevel, msg, args...)
 }
 
-func (gs *Logger) TraceFields(ctx context.Context, msg string, args ...Field) {
-	gs.logFields(ctx, TraceLevel, msg, args...)
+func (gs *Logger) TraceFields(msg string, args ...Field) {
+	gs.logFields(context.Background(), TraceLevel, msg, args...)
 }
 
 func (gs *Logger) DebugFields(msg string, args ...Field) {
@@ -123,7 +123,22 @@ func (gs *Logger) log(ctx context.Context, level LevelEnabler, msg string, args 
 	if !gs.Enable(ctx, level) {
 		return
 	}
+	var field Field
+	fields := make([]Field, 0)
+	for len(args) > 0 {
+		field, args = argsToFields(args...)
+		fields = append(fields, field)
+	}
+	var pcs [1]uintptr
+	// runtime.Callers. this function, this function's Caller
+	runtime.Callers(3, pcs[:])
+	entry := NewLogEntry(time.Now(), level.Level(), msg, pcs[0])
+	entry.AppendFields(fields...)
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
+	_ = gs.handler.LogRecord(ctx, entry)
 }
 
 func (gs *Logger) logFields(ctx context.Context, level LevelEnabler, msg string, args ...Field) {

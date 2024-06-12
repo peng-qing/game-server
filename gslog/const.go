@@ -1,18 +1,19 @@
 package gslog
 
 const (
-	SerializeArrayBegin = '['
-	SerializeArrayStep  = ','
-	SerializeArrayEnd   = ']'
-
-	SerializePrefixBegin = '<'
-	SerializePrefixEnd   = '>'
-
-	SerializeTimeMicroSecondSplit = '.'
-
-	SerializeStepSplit = ' '
-
-	SerializeFileLineSplit = ':'
+	SerializeArrayBegin      = '['
+	SerializeCommaStep       = ','
+	SerializeArrayEnd        = ']'
+	SerializePrefixBegin     = '<'
+	SerializePrefixEnd       = '>'
+	SerializeRadixPointSplit = '.'
+	SerializeSpaceSplit      = ' '
+	SerializeColonSplit      = ':'
+	SerializeFieldStep       = '='
+	SerializeNewLine         = '\n'
+	SerializeJsonStart       = '{'
+	SerializeJsonEnd         = '}'
+	SerializeStringMarks     = '"'
 )
 
 const (
@@ -21,12 +22,21 @@ const (
 )
 
 const (
-	BitDate            = 1 << iota // 日期标记位
-	BitTime                        // 时间标记位
-	BitMicroSecond                 // 微妙标记位
-	BitFile                        // 文件路径标记位
-	BitFunction                    // 调用函数标记位
-	BitLogLevel                    // 日志级别 首字母大写 Trace/Debug/...
-	BitLogLevelUpCase              // 日志级别 全大写 TRACE/DEBUG/...
-	BitLogLevelLowCase             // 日志级别 全小写 debug/info/...
+	BitTextDate            = 1 << iota // 日期标记位
+	BitTextTime                        // 时间标记位
+	BitTextMicroSecond                 // 微妙标记位
+	BitTextFile                        // 文件路径标记位
+	BitTextFunction                    // 调用函数标记位
+	BitTextLogLevel                    // 日志级别 首字母大写 Trace/Debug/...
+	BitTextLogLevelUpCase              // 日志级别 全大写 TRACE/DEBUG/...
+	BitTextLogLevelLowCase             // 日志级别 全小写 debug/info/...
+
+	DefaultBitFlag = BitTextDate | BitTextTime | BitTextMicroSecond | BitTextFile | BitTextLogLevel
+)
+
+const (
+	JsonTimeKey    = "time"
+	JsonSourceKey  = "source"
+	JsonLevelKey   = "level"
+	JsonMessageKey = "message"
 )

@@ -380,9 +380,14 @@ func (gs FieldValue) serializeFields() []byte {
 	buffer = append(buffer, SerializeArrayBegin)
 	for idx, field := range fields {
 		if idx > 0 {
-			buffer = append(buffer, SerializeArrayStep)
+			buffer = append(buffer, SerializeCommaStep, SerializeSpaceSplit)
 		}
-		buffer = fmt.Append(buffer, field)
+		data, err := field.SerializeText()
+		if err != nil {
+			buffer = fmt.Append(buffer, field)
+			continue
+		}
+		buffer = append(buffer, data...)
 	}
 	return append(buffer, SerializeArrayEnd)
 }
@@ -398,7 +403,8 @@ func (gs FieldValue) serializeInt64s() []byte {
 	buffer.AppendByte(SerializeArrayBegin)
 	for idx, num := range nums {
 		if idx > 0 {
-			buffer.AppendByte(SerializeArrayStep)
+			buffer.AppendByte(SerializeCommaStep)
+			buffer.AppendByte(SerializeSpaceSplit)
 		}
 		buffer.AppendInt(num)
 	}
@@ -419,7 +425,8 @@ func (gs FieldValue) serializeUint64s() []byte {
 	buffer.AppendByte(SerializeArrayBegin)
 	for idx, num := range nums {
 		if idx > 0 {
-			buffer.AppendByte(SerializeArrayStep)
+			buffer.AppendByte(SerializeCommaStep)
+			buffer.AppendByte(SerializeSpaceSplit)
 		}
 		buffer.AppendUint(num)
 	}
@@ -440,7 +447,8 @@ func (gs FieldValue) serializeFloat64s() []byte {
 	buffer.AppendByte(SerializeArrayBegin)
 	for idx, num := range nums {
 		if idx > 0 {
-			buffer.AppendByte(SerializeArrayStep)
+			buffer.AppendByte(SerializeCommaStep)
+			buffer.AppendByte(SerializeSpaceSplit)
 		}
 		buffer.AppendFloat(num, 64)
 	}
@@ -460,7 +468,8 @@ func (gs FieldValue) serializeStrings() []byte {
 	builder.WriteByte(SerializeArrayBegin)
 	for idx, str := range strs {
 		if idx > 0 {
-			builder.WriteByte(SerializeArrayStep)
+			builder.WriteByte(SerializeCommaStep)
+			builder.WriteByte(SerializeSpaceSplit)
 		}
 		builder.WriteString(str)
 	}
@@ -481,7 +490,8 @@ func (gs FieldValue) serializeBools() []byte {
 	buffer.AppendByte(SerializeArrayBegin)
 	for idx, boolVal := range bools {
 		if idx > 0 {
-			buffer.AppendByte(SerializeArrayStep)
+			buffer.AppendByte(SerializeCommaStep)
+			buffer.AppendByte(SerializeSpaceSplit)
 		}
 		buffer.AppendBool(boolVal)
 	}

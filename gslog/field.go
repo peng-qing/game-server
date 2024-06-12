@@ -2,6 +2,7 @@ package gslog
 
 import (
 	"GameServer/types"
+	"encoding"
 	"time"
 )
 
@@ -86,6 +87,44 @@ func Any(key string, val any) Field {
 }
 
 ////////// Accessors
+
+// SerializeText 序列化文本格式 key=value
+func (gs Field) SerializeText() ([]byte, error) {
+	buffer := Get()
+	_, _ = buffer.WriteString(gs.Key)
+	if gs.Value.Kind() == FieldValueKindField {
+		buffer.AppendByte(SerializeRadixPointSplit)
+		data, err := gs.Value.Field().SerializeText()
+		if err != nil {
+			return nil, err
+		}
+		buffer.AppendBytes(data)
+		return buffer.Bytes(), nil
+	}
+	buffer.AppendByte(SerializeFieldStep)
+	if gs.Value.Kind() == FieldValueKindAny {
+		if vv, ok := gs.Value.value.(encoding.TextMarshaler); ok {
+			data, err := vv.MarshalText()
+			if err != nil {
+				return nil, err
+			}
+			buffer.AppendBytes(data)
+			return buffer.Bytes(), nil
+		}
+	}
+	// default
+	buffer.AppendString(gs.Value.String())
+
+	return buffer.Bytes(), nil
+}
+
+// SerializeJson 序列化json格式 key: value
+func (gs Field) SerializeJson() ([]byte, error) {
+	buffer := Get()
+	buffer.AppendByte(SerializeRadixPointSplit)
+
+	return buffer.Bytes(), nil
+}
 
 ////////// internal
 
