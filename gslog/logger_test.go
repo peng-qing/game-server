@@ -1,7 +1,6 @@
 package gslog
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -34,14 +33,5 @@ func TestLogger(t *testing.T) {
 	loggerJson.Debug("json debug log", "test", &Version{
 		K: "11",
 		V: "222",
-	}, "sss", time.Now(), "zzz", "")
-	vv := make(map[string]any)
-	vv["zzz"] = "\""
-
-	data, err := json.Marshal(vv)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(string(data))
+	}, "sss", time.Now(), "zzz", "\"")
 }
