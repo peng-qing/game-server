@@ -1,8 +1,10 @@
 package gslog
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 )
 
 type std struct{}
@@ -10,6 +12,11 @@ type std struct{}
 func (std) Write(p []byte) (n int, err error) {
 	fmt.Print(string(p))
 	return len(p), nil
+}
+
+type Version struct {
+	K string
+	V string
 }
 
 func TestLogger(t *testing.T) {
@@ -24,6 +31,17 @@ func TestLogger(t *testing.T) {
 	logger.TraceFields("debug fields", Int("LogLevel", 1), Fields("Fields", Int("Level", 10), Float("Amount", 100.00)))
 
 	loggerJson := NewLogger(NewJsonHandler(std{}, WithLevelEnabler(TraceLevel)))
+	loggerJson.Debug("json debug log", "test", &Version{
+		K: "11",
+		V: "222",
+	}, "sss", time.Now(), "zzz", "")
+	vv := make(map[string]any)
+	vv["zzz"] = "\""
 
-	loggerJson.Debug("Debug json message", "test", 1111)
+	data, err := json.Marshal(vv)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(string(data))
 }

@@ -3,6 +3,8 @@ package gslog
 import (
 	"GameServer/types"
 	"encoding"
+	"encoding/json"
+	"reflect"
 	"time"
 )
 
@@ -86,15 +88,18 @@ func Any(key string, val any) Field {
 	}
 }
 
-////////// Accessors
+////////// implements
 
-// SerializeText 序列化文本格式 key=value
-func (gs Field) SerializeText() ([]byte, error) {
+// MarshalText 序列化文本格式 key=value
+// 实现 encoding.TextMarshaler 接口
+func (gs Field) MarshalText() ([]byte, error) {
 	buffer := Get()
-	_, _ = buffer.WriteString(gs.Key)
+	defer buffer.Free()
+
+	buffer.AppendString(gs.Key)
 	if gs.Value.Kind() == FieldValueKindField {
 		buffer.AppendByte(SerializeRadixPointSplit)
-		data, err := gs.Value.Field().SerializeText()
+		data, err := gs.Value.Field().MarshalText()
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +108,7 @@ func (gs Field) SerializeText() ([]byte, error) {
 	}
 	buffer.AppendByte(SerializeFieldStep)
 	if gs.Value.Kind() == FieldValueKindAny {
-		if vv, ok := gs.Value.value.(encoding.TextMarshaler); ok {
+		if vv, ok := gs.Value.Any().(encoding.TextMarshaler); ok {
 			data, err := vv.MarshalText()
 			if err != nil {
 				return nil, err
@@ -118,11 +123,55 @@ func (gs Field) SerializeText() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// SerializeJson 序列化json格式 key: value
-func (gs Field) SerializeJson() ([]byte, error) {
+// MarshalJSON 序列化Json格式 {"key":value}
+// 实现 json.Marshaler 接口
+func (gs Field) MarshalJSON() ([]byte, error) {
 	buffer := Get()
-	buffer.AppendByte(SerializeRadixPointSplit)
+	defer buffer.Free()
+	// key
+	buffer.AppendByte(SerializeJsonStart)
+	buffer.AppendByte(SerializeStringMarks)
+	buffer.AppendString(gs.Key)
+	buffer.AppendByte(SerializeStringMarks)
+	buffer.AppendByte(SerializeColonSplit)
 
+	switch gs.Value.Kind() {
+	case FieldValueKindField:
+		data, err := gs.Value.Field().MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		buffer.AppendBytes(data)
+	case FieldValueKindAny:
+		if vv, ok := gs.Value.Any().(json.Marshaler); ok {
+			data, err := vv.MarshalJSON()
+			if err != nil {
+				return nil, err
+			}
+			buffer.AppendBytes(data)
+			break
+		}
+		if vv := reflect.ValueOf(gs.Value.Any()); vv.Kind() == reflect.Pointer {
+			if vv.IsNil() {
+				buffer.AppendByte(SerializeStringMarks)
+				buffer.AppendByte(SerializeStringMarks)
+				break
+			}
+			// 先解引用
+			elem := vv.Elem()
+			data, err := json.Marshal(elem.Interface())
+			if err != nil {
+				return nil, err
+			}
+			buffer.AppendBytes(data)
+		}
+	default:
+		buffer.AppendByte(SerializeStringMarks)
+		buffer.AppendString(gs.Value.String())
+		buffer.AppendByte(SerializeStringMarks)
+	}
+
+	buffer.AppendByte(SerializeJsonEnd)
 	return buffer.Bytes(), nil
 }
 

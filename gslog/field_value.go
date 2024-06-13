@@ -328,6 +328,45 @@ func (gs FieldValue) Error() error {
 	return gs.value.(error)
 }
 
+func (gs FieldValue) Any() any {
+	switch gs.Kind() {
+	case FieldValueKindAny:
+		return gs.value
+	case FieldValueKindInt64:
+		return gs.Int64()
+	case FieldValueKindInt64s:
+		return gs.Int64s()
+	case FieldValueKindUint64:
+		return gs.Uint64()
+	case FieldValueKindUint64s:
+		return gs.Uint64s()
+	case FieldValueKindFloat64:
+		return gs.Float64()
+	case FieldValueKindFloat64s:
+		return gs.Float64s()
+	case FieldValueKindString:
+		return gs.String()
+	case FieldValueKindStrings:
+		return gs.Strings()
+	case FieldValueKindBool:
+		return gs.Bool()
+	case FieldValueKindBools:
+		return gs.Bools()
+	case FieldValueKindTime:
+		return gs.Time()
+	case FieldValueKindDuration:
+		return gs.Duration()
+	case FieldValueKindField:
+		return gs.Field()
+	case FieldValueKindFields:
+		return gs.Fields()
+	case FieldValueKindError:
+		return gs.Error()
+	default:
+		panic(fmt.Sprintf("unknown kind %s", gs.Kind()))
+	}
+}
+
 ////////// internal
 
 // format to dst... like fmt.Sprint
@@ -342,7 +381,7 @@ func (gs FieldValue) appendFieldValue(dst []byte) []byte {
 	case FieldValueKindBool:
 		return strconv.AppendBool(dst, gs.value.(bool))
 	case FieldValueKindTime:
-		return append(dst, gs.value.(time.Time).String()...)
+		return gs.value.(time.Time).AppendFormat(dst, time.RFC3339)
 	case FieldValueKindDuration:
 		return append(dst, gs.value.(time.Duration).String()...)
 	case FieldValueKindString:
@@ -382,7 +421,7 @@ func (gs FieldValue) serializeFields() []byte {
 		if idx > 0 {
 			buffer = append(buffer, SerializeCommaStep, SerializeSpaceSplit)
 		}
-		data, err := field.SerializeText()
+		data, err := field.MarshalText()
 		if err != nil {
 			buffer = fmt.Append(buffer, field)
 			continue

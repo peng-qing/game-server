@@ -39,4 +39,5 @@ const (
 	JsonSourceKey  = "source"
 	JsonLevelKey   = "level"
 	JsonMessageKey = "message"
+	JsonFieldsKey  = "fields"
 )

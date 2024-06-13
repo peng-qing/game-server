@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 	"time"
 
@@ -60,6 +61,7 @@ func NewTextHandler(writeSyncer io.Writer, opts ...Options) *TextHandler {
 
 func (gs *TextHandler) LogRecord(_ context.Context, entry *LogEntry) error {
 	buffer := Get()
+	defer buffer.Free()
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
 
@@ -136,7 +138,7 @@ func (gs *TextHandler) LogRecord(_ context.Context, entry *LogEntry) error {
 	}
 	// fields
 	for _, field := range entry.Fields {
-		data, err := field.SerializeText()
+		data, err := field.MarshalText()
 		if err != nil {
 			continue
 		}
@@ -162,9 +164,10 @@ func NewJsonHandler(writeSyncer io.Writer, opts ...Options) *JsonHandler {
 }
 
 func (gs *JsonHandler) LogRecord(_ context.Context, entry *LogEntry) error {
-	buffer := Get()
 	gs.mutex.Lock()
 	defer gs.mutex.Unlock()
+	buffer := Get()
+	defer buffer.Free()
 
 	buffer.AppendByte(SerializeJsonStart)
 	// 时间
@@ -197,17 +200,8 @@ func (gs *JsonHandler) LogRecord(_ context.Context, entry *LogEntry) error {
 	}
 	// fields...
 	{
-		for _, field := range entry.Fields {
-			gs.appendJsonKey(buffer, field.Key)
-			gs.appendJsonValue(buffer, field.Value)
-
-			//gs.appendJsonValue(buffer, field.Value.String())
-			//	data, err := field.SerializeJson()
-			//	if err != nil {
-			//		continue
-			//	}
-			//	buffer.AppendBytes(data)
-		}
+		gs.appendJsonKey(buffer, JsonFieldsKey)
+		gs.appendJsonValue(buffer, entry.Fields)
 	}
 	buffer.AppendByte(SerializeJsonEnd)
 	buffer.AppendByte(SerializeNewLine)
@@ -218,85 +212,85 @@ func (gs *JsonHandler) LogRecord(_ context.Context, entry *LogEntry) error {
 }
 
 func (gs *JsonHandler) appendJsonKey(buffer *pool.Buffer, key string) {
-	/// json string,
-	if buffer.Size() != 1 {
+	/// json string, has prefix '{'
+	if buffer.Size() > 1 {
 		buffer.AppendByte(SerializeCommaStep)
 	}
-	// "key":<space>
+	// "key":
 	buffer.AppendByte(SerializeStringMarks)
 	buffer.AppendString(key)
 	buffer.AppendByte(SerializeStringMarks)
 	buffer.AppendByte(SerializeColonSplit)
-	buffer.AppendByte(SerializeSpaceSplit)
 }
 
-// TODO 需要重构 目前对于各种类型支持的不好 并且如果是Field无法处理
 func (gs *JsonHandler) appendJsonValue(buffer *pool.Buffer, val any) {
 	defer func() {
-		if err := recover(); err != nil {
+		if r := recover(); r != nil {
+			if vv := reflect.ValueOf(val); vv.Kind() == reflect.Pointer && vv.IsNil() {
+				buffer.AppendByte(SerializeStringMarks)
+				buffer.AppendString("<nil>")
+				buffer.AppendByte(SerializeStringMarks)
+				return
+			}
 			buffer.AppendByte(SerializeStringMarks)
-			_ = fmt.Sprintf("%+v", val)
+			buffer.AppendString(fmt.Sprintf("Panic: %v", r))
 			buffer.AppendByte(SerializeStringMarks)
 		}
 	}()
-
-	// 实现 json.Marshaler 接口
-	if vv, ok := val.(json.Marshaler); ok {
-		data, err := vv.MarshalJSON()
+	// 如果有定制
+	switch vv := val.(type) {
+	case time.Time:
+		buffer.AppendByte(SerializeStringMarks)
+		format := gs.opts.jsonTimeFormat
+		if format == "" {
+			format = time.RFC3339
+		}
+		buffer.AppendString(vv.Format(format))
+		buffer.AppendByte(SerializeStringMarks)
+	case []Field:
+		// 其实这个可以不需要 field 已经实现了 json.Marshaler 接口
+		// 在调用 jsonEncoder.Encode 的时候判断是否实现 json.Marshaler 然后会自动调用 MarshalJSON
+		buffer.AppendByte(SerializeArrayBegin)
+		for idx, field := range vv {
+			if idx > 0 {
+				buffer.AppendByte(SerializeCommaStep)
+			}
+			data, err := field.MarshalJSON()
+			if err != nil {
+				panic(err)
+			}
+			buffer.AppendBytes(data)
+		}
+		buffer.AppendByte(SerializeArrayEnd)
+	default:
+		// 默认
+		data, err := appendJsonMarshal(val)
 		if err != nil {
 			panic(err)
 		}
 		buffer.AppendBytes(data)
-		return
 	}
-	// slice
-	//if reflect.TypeOf(val).Kind() == reflect.Slice {
-	//	sliceVals := reflect.ValueOf(val)
-	//	res := make([]any, sliceVals.Len())
-	//	for i := 0; i < sliceVals.Len(); i++ {
-	//		res[i] = sliceVals.Index(i).Interface()
-	//	}
-	//	encBuf := Get()
-	//	enc := json.NewEncoder(encBuf)
-	//	enc.SetEscapeHTML(false)
-	//	if err := enc.Encode(res); err != nil {
-	//		panic(err)
-	//	}
-	//	encBuf.TrimNewLine()
-	//	buffer.AppendBytes(encBuf.Bytes())
-	//	return
-	//}
+}
 
-	switch vv := val.(type) {
-	case string:
-		buffer.AppendByte(SerializeStringMarks)
-		buffer.AppendString(vv)
-		buffer.AppendByte(SerializeStringMarks)
-	case byte:
-		buffer.AppendByte(SerializeStringMarks)
-		buffer.AppendByte(vv)
-		buffer.AppendByte(SerializeStringMarks)
-	case time.Time:
-		buffer.AppendByte(SerializeStringMarks)
-		if !vv.IsZero() {
-			format := gs.opts.jsonTimeFormat
-			if format == "" {
-				format = time.RFC3339
-			}
-			buffer.AppendTime(vv, format)
+func appendJsonMarshal(val any) ([]byte, error) {
+	// 实现 json.Marshaler 接口
+	if vv, ok := val.(json.Marshaler); ok {
+		data, err := vv.MarshalJSON()
+		if err != nil {
+			return nil, err
 		}
-		buffer.AppendByte(SerializeStringMarks)
-	case bool:
-		buffer.AppendBool(vv)
-	case int, int8, int32, int16, int64:
-		buffer.AppendInt(vv.(int64))
-	case uint, uint16, uint32, uint64:
-		buffer.AppendUint(vv.(uint64))
-	case float32, float64:
-		buffer.AppendFloat(vv.(float64), 64)
-	default:
-		buffer.AppendByte(SerializeStringMarks)
-		_ = fmt.Sprintf("%+v", val)
-		buffer.AppendByte(SerializeStringMarks)
+		return data, nil
 	}
+
+	buffer := Get()
+	defer buffer.Free()
+
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(val)
+	if err != nil {
+		return nil, err
+	}
+	buffer.TrimNewLine()
+	return buffer.Bytes(), nil
 }
