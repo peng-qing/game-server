@@ -125,10 +125,24 @@ func (gs Field) MarshalText() ([]byte, error) {
 // MarshalJSON 序列化Json格式 {"key":value}
 // 实现 json.Marshaler 接口
 func (gs Field) MarshalJSON() ([]byte, error) {
+	buffer := Get()
+	defer buffer.Free()
+	// 考虑要不要对空指针指针进行处理
+	//if gs.Value.Kind() == FieldValueKindAny {
+	//	if gs.Value.Any() == nil {
+	//		// handler...
+	//	}
+	//}
+
 	fieldKV := make(map[string]any)
 	fieldKV[gs.Key] = gs.Value.Any()
+	data, err := json.Marshal(fieldKV)
+	if err != nil {
+		return nil, err
+	}
+	buffer.AppendBytes(data)
 
-	return json.Marshal(fieldKV)
+	return buffer.Bytes(), nil
 }
 
 ////////// internal

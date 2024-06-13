@@ -33,5 +33,5 @@ func TestLogger(t *testing.T) {
 	loggerJson.Debug("json debug log", "test", &Version{
 		K: "11",
 		V: "222",
-	}, "sss", time.Now(), "zzz", "\"")
+	}, "sss", time.Now(), "zzz", "\"", "ptr", nil, "num", 1111)
 }
