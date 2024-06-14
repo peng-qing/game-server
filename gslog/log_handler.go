@@ -26,7 +26,9 @@ type commonHandler struct {
 }
 
 func newCommonHandler(writeSyncer io.Writer, opts ...Options) *commonHandler {
-	options := &LogHandlerOptions{}
+	options := &LogHandlerOptions{
+		textFlag: DefaultBitFlag,
+	}
 	for _, opt := range opts {
 		opt.apply(options)
 	}

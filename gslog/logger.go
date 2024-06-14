@@ -2,9 +2,31 @@ package gslog
 
 import (
 	"context"
+	"os"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"time"
 )
+
+var (
+	defaultLogger atomic.Pointer[Logger]
+	once          sync.Once
+)
+
+func init() {
+	once.Do(func() {
+		defaultLogger.Store(NewLogger(NewTextHandler(os.Stdout, WithTextFlag(DefaultBitFlag), WithLevelEnabler(TraceLevel))))
+	})
+}
+
+func Default() *Logger {
+	return defaultLogger.Load()
+}
+
+func SetDefault(logger *Logger) {
+	defaultLogger.Store(logger)
+}
 
 type Logger struct {
 	handler LogHandler
@@ -156,4 +178,100 @@ func (gs *Logger) logFields(ctx context.Context, level LevelEnabler, msg string,
 	}
 
 	_ = gs.handler.LogRecord(ctx, entry)
+}
+
+func Trace(msg string, args ...any) {
+	Default().log(context.Background(), TraceLevel, msg, args...)
+}
+
+func Debug(msg string, args ...any) {
+	Default().log(context.Background(), DebugLevel, msg, args...)
+}
+
+func Info(msg string, args ...any) {
+	Default().log(context.Background(), InfoLevel, msg, args...)
+}
+
+func Warn(msg string, args ...any) {
+	Default().log(context.Background(), WarnLevel, msg, args...)
+}
+
+func Error(msg string, args ...any) {
+	Default().log(context.Background(), ErrorLevel, msg, args...)
+}
+
+func Critical(msg string, args ...any) {
+	Default().log(context.Background(), CriticalLevel, msg, args...)
+}
+
+func TraceContext(ctx context.Context, msg string, args ...any) {
+	Default().log(ctx, TraceLevel, msg, args...)
+}
+
+func DebugContext(ctx context.Context, msg string, args ...any) {
+	Default().log(ctx, DebugLevel, msg, args...)
+}
+
+func InfoContext(ctx context.Context, msg string, args ...any) {
+	Default().log(ctx, InfoLevel, msg, args...)
+}
+
+func WarnContext(ctx context.Context, msg string, args ...any) {
+	Default().log(ctx, WarnLevel, msg, args...)
+}
+
+func ErrorContext(ctx context.Context, msg string, args ...any) {
+	Default().log(ctx, ErrorLevel, msg, args...)
+}
+
+func CriticalContext(ctx context.Context, msg string, args ...any) {
+	Default().log(ctx, CriticalLevel, msg, args...)
+}
+
+func TraceFields(msg string, args ...Field) {
+	Default().logFields(context.Background(), TraceLevel, msg, args...)
+}
+
+func DebugFields(msg string, args ...Field) {
+	Default().logFields(context.Background(), DebugLevel, msg, args...)
+}
+
+func InfoFields(msg string, args ...Field) {
+	Default().logFields(context.Background(), InfoLevel, msg, args...)
+}
+
+func WarnFields(msg string, args ...Field) {
+	Default().logFields(context.Background(), WarnLevel, msg, args...)
+}
+
+func ErrorFields(msg string, args ...Field) {
+	Default().logFields(context.Background(), ErrorLevel, msg, args...)
+}
+
+func CriticalFields(msg string, args ...Field) {
+	Default().logFields(context.Background(), CriticalLevel, msg, args...)
+}
+
+func TraceFieldsContext(ctx context.Context, msg string, args ...Field) {
+	Default().logFields(ctx, TraceLevel, msg, args...)
+}
+
+func DebugFieldsContext(ctx context.Context, msg string, args ...Field) {
+	Default().logFields(ctx, DebugLevel, msg, args...)
+}
+
+func InfoFieldsContext(ctx context.Context, msg string, args ...Field) {
+	Default().logFields(ctx, InfoLevel, msg, args...)
+}
+
+func WarnFieldsContext(ctx context.Context, msg string, args ...Field) {
+	Default().logFields(ctx, WarnLevel, msg, args...)
+}
+
+func ErrorFieldsContext(ctx context.Context, msg string, args ...Field) {
+	Default().logFields(ctx, ErrorLevel, msg, args...)
+}
+
+func CriticalFieldsContext(ctx context.Context, msg string, args ...Field) {
+	Default().logFields(ctx, CriticalLevel, msg, args...)
 }

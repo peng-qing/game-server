@@ -1,12 +1,13 @@
 package gslog
 
 import (
-	"GameServer/utils"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"GameServer/utils"
 )
 
 // 如果要实现结构化日志

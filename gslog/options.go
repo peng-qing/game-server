@@ -34,3 +34,15 @@ func WithTextFlag(flag int) Options {
 		options.textFlag = flag
 	})
 }
+
+func WithTextPrefix(textPrefix string) Options {
+	return optionFunc(func(options *LogHandlerOptions) {
+		options.textPrefix = textPrefix
+	})
+}
+
+func WithJsonTimeFormat(format string) Options {
+	return optionFunc(func(options *LogHandlerOptions) {
+		options.jsonTimeFormat = format
+	})
+}

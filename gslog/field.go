@@ -1,10 +1,11 @@
 package gslog
 
 import (
-	"GameServer/types"
 	"encoding"
 	"encoding/json"
 	"time"
+
+	"GameServer/types"
 )
 
 type Field struct {
