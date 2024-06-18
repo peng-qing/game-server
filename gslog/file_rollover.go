@@ -1,18 +1,29 @@
 package gslog
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 )
+
+// 检查实现 io.Closer 接口
+var _ io.Closer = (*LogFileRollover)(nil)
 
 const (
 	// 压缩后缀
 	compressSuffix = ".gz"
+	// 默认单位 MB
+	megaByte = 1024 * 1024
 	// 默认文件分割大小 100MB
-	defaultSize = 1024 * 1024 * 100
+	defaultSize = megaByte * 100
 	// 追加文件不存在时文件后缀
 	defaultNotExistFileSuffix = "-gs_rollover.log"
+	// 备份文件名格式化
+	backupTimeFormat = "2006-01-02T15:04:05.000"
 )
 
 // LogFileRollover 文件日志分割器
@@ -33,9 +44,11 @@ type LogFileRollover struct {
 	compress bool
 
 	// 当前文件大小
-	size int
+	size int64
 	mu   sync.Mutex
 }
+
+/////////// constructs
 
 func NewLogFileRollover(file *os.File, maxSize int, maxBackups int, maxAge int, compress bool) *LogFileRollover {
 	return &LogFileRollover{
@@ -47,6 +60,8 @@ func NewLogFileRollover(file *os.File, maxSize int, maxBackups int, maxAge int, 
 	}
 }
 
+/////////// Accessors
+
 func (gs *LogFileRollover) FileName() string {
 	if gs.file != nil {
 		return gs.file.Name()
@@ -57,61 +72,123 @@ func (gs *LogFileRollover) FileName() string {
 }
 
 func (gs *LogFileRollover) MaxSize() int64 {
-
+	if gs.maxSize != 0 {
+		return int64(gs.maxSize * megaByte)
+	}
 	return defaultSize
 }
+
+func (gs *LogFileRollover) FilePath() string {
+	return filepath.Dir(gs.FileName())
+}
+
+/////////// implements
 
 func (gs *LogFileRollover) Write(p []byte) (n int, err error) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
-	//rewriteSize := len(p)
-	//if rewriteSize > gs.MaxSize() {
-	//	// 写入大小溢出
-	//	return 0, fmt.Errorf("write too large (%d > %d)", rewriteSize, gs.MaxSize)
-	//}
-	//
-	//if gs.file == nil {
-	//	// 如果追加文件不存在 在当前目录创建尝试创建临时目录
-	//	if err = gs.tryOpenOrCreateFile(rewriteSize); err != nil {
-	//		return 0, err
-	//	}
-	//}
-	//
-	//// 超过 MaxSize
-	//if rewriteSize+gs.size > gs.MaxSize() {
-	//
-	//}
+	rewriteSize := int64(len(p))
+	if rewriteSize > gs.MaxSize() {
+		return 0, fmt.Errorf("write too large (%d>%d)", rewriteSize, gs.MaxSize())
+	}
 
-	//
-	//	if l.size+writeLen > l.max() {
-	//		if err := l.rotate(); err != nil {
-	//			return 0, err
-	//		}
-	//	}
-	//
-	//	n, err = l.file.Write(p)
-	//	l.size += int64(n)
-	//
+	if gs.file == nil {
+		// 追加文件不存在 尝试创建
+		if err = gs.tryOpenOrCreateFile(rewriteSize); err != nil {
+			return 0, err
+		}
+	}
+
+	// 超过MaxSize
+	if rewriteSize+gs.size > gs.MaxSize() {
+		//TODO 轮转到新文件
+	}
+
+	n, err = gs.file.Write(p)
+	gs.size += int64(n)
+
 	return n, err
 }
 
-///////// internal
+func (gs *LogFileRollover) Close() error {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
 
-func (gs *LogFileRollover) tryOpenOrCreateFile(rewriteSize int) error {
+	var err error
+	if gs.file != nil {
+		err = gs.file.Close()
+		gs.file = nil
+	}
+
+	return err
+}
+
+///////// internal
+///////// 下面接口为内部接口，都不进行加锁，由调用内部接口得外部接口完成加锁和释放
+
+func (gs *LogFileRollover) tryOpenOrCreateFile(rewriteSize int64) error {
 	fileName := gs.FileName()
 	info, err := os.Stat(fileName)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// todo open file
-			return nil
+			return gs.openNew()
 		}
 		return err
 	}
 
-	if info.Size()+int64(rewriteSize) >= gs.MaxSize() {
+	if info.Size()+rewriteSize >= gs.MaxSize() {
+		// TODO 轮转到新文件
 
 	}
+	// 尝试追加
+	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		// 追加失败 创建
+		return gs.openNew()
+	}
+
+	gs.file = file
+	gs.size = info.Size()
 
 	return nil
+}
+
+func (gs *LogFileRollover) openNew() error {
+	err := os.MkdirAll(gs.FilePath(), 0755)
+	if err != nil {
+		return err
+	}
+	name := gs.FileName()
+	mode := os.FileMode(0644)
+	info, err := os.Stat(name)
+	if err == nil {
+		// 老文件mode
+		mode = info.Mode()
+		newName := backupName(gs.FileName())
+		if err = os.Rename(name, newName); err != nil {
+			return err
+		}
+	}
+
+	newFile, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	gs.file = newFile
+	gs.size = 0
+
+	return nil
+}
+
+/////////// util functions
+
+func backupName(name string) string {
+	dir := filepath.Dir(name)
+	filename := filepath.Base(name)
+	ext := filepath.Ext(filename)
+	prefix := strings.TrimSuffix(filename, ext)
+	nowTm := time.Now()
+
+	return filepath.Join(dir, fmt.Sprintf("%s_%s%s", prefix, nowTm.Format(backupTimeFormat), ext))
 }
