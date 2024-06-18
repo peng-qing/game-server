@@ -62,24 +62,12 @@ func NewLogFileRollover(file *os.File, maxSize int, maxBackups int, maxAge int, 
 
 /////////// Accessors
 
-func (gs *LogFileRollover) FileName() string {
-	if gs.file != nil {
-		return gs.file.Name()
-	}
-	// 默认路径
-	fileName := filepath.Base(os.Args[0]) + defaultNotExistFileSuffix
-	return filepath.Join(os.TempDir(), fileName)
-}
+// Rotate 轮转日志文件
+func (gs *LogFileRollover) Rotate() error {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
 
-func (gs *LogFileRollover) MaxSize() int64 {
-	if gs.maxSize != 0 {
-		return int64(gs.maxSize * megaByte)
-	}
-	return defaultSize
-}
-
-func (gs *LogFileRollover) FilePath() string {
-	return filepath.Dir(gs.FileName())
+	return gs.rotate()
 }
 
 /////////// implements
@@ -89,8 +77,8 @@ func (gs *LogFileRollover) Write(p []byte) (n int, err error) {
 	defer gs.mu.Unlock()
 
 	rewriteSize := int64(len(p))
-	if rewriteSize > gs.MaxSize() {
-		return 0, fmt.Errorf("write too large (%d>%d)", rewriteSize, gs.MaxSize())
+	if rewriteSize > gs.maxFileSize() {
+		return 0, fmt.Errorf("write too large (%d>%d)", rewriteSize, gs.maxFileSize())
 	}
 
 	if gs.file == nil {
@@ -101,8 +89,11 @@ func (gs *LogFileRollover) Write(p []byte) (n int, err error) {
 	}
 
 	// 超过MaxSize
-	if rewriteSize+gs.size > gs.MaxSize() {
-		//TODO 轮转到新文件
+	if rewriteSize+gs.size > gs.maxFileSize() {
+		// 轮转到新文件
+		if err = gs.rotate(); err != nil {
+			return 0, err
+		}
 	}
 
 	n, err = gs.file.Write(p)
@@ -115,20 +106,14 @@ func (gs *LogFileRollover) Close() error {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
-	var err error
-	if gs.file != nil {
-		err = gs.file.Close()
-		gs.file = nil
-	}
-
-	return err
+	return gs.close()
 }
 
 ///////// internal
-///////// 下面接口为内部接口，都不进行加锁，由调用内部接口得外部接口完成加锁和释放
+///////// 下面接口为内部接口，都不进行加锁，由调用内部接口的对外接口完成加锁和释放
 
 func (gs *LogFileRollover) tryOpenOrCreateFile(rewriteSize int64) error {
-	fileName := gs.FileName()
+	fileName := gs.fileName()
 	info, err := os.Stat(fileName)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -137,9 +122,9 @@ func (gs *LogFileRollover) tryOpenOrCreateFile(rewriteSize int64) error {
 		return err
 	}
 
-	if info.Size()+rewriteSize >= gs.MaxSize() {
-		// TODO 轮转到新文件
-
+	if info.Size()+rewriteSize >= gs.maxFileSize() {
+		// 轮转到新文件
+		return gs.rotate()
 	}
 	// 尝试追加
 	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0644)
@@ -155,22 +140,22 @@ func (gs *LogFileRollover) tryOpenOrCreateFile(rewriteSize int64) error {
 }
 
 func (gs *LogFileRollover) openNew() error {
-	err := os.MkdirAll(gs.FilePath(), 0755)
+	err := os.MkdirAll(gs.filePath(), 0755)
 	if err != nil {
 		return err
 	}
-	name := gs.FileName()
+	name := gs.fileName()
 	mode := os.FileMode(0644)
 	info, err := os.Stat(name)
 	if err == nil {
 		// 老文件mode
 		mode = info.Mode()
-		newName := backupName(gs.FileName())
+		newName := backupName(gs.fileName())
 		if err = os.Rename(name, newName); err != nil {
 			return err
 		}
 	}
-
+	// 截断
 	newFile, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
@@ -179,6 +164,49 @@ func (gs *LogFileRollover) openNew() error {
 	gs.size = 0
 
 	return nil
+}
+
+func (gs *LogFileRollover) rotate() error {
+	var err error
+	// 先关闭旧的
+	if err = gs.close(); err != nil {
+		return err
+	}
+	// 再开新的
+	if err = gs.openNew(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (gs *LogFileRollover) close() (err error) {
+	if gs.file != nil {
+		err = gs.file.Close()
+		gs.file = nil
+	}
+
+	return err
+}
+
+func (gs *LogFileRollover) fileName() string {
+	if gs.file != nil {
+		return gs.file.Name()
+	}
+	// 默认路径
+	fileName := filepath.Base(os.Args[0]) + defaultNotExistFileSuffix
+	return filepath.Join(os.TempDir(), fileName)
+}
+
+func (gs *LogFileRollover) maxFileSize() int64 {
+	if gs.maxSize != 0 {
+		return int64(gs.maxSize * megaByte)
+	}
+	return defaultSize
+}
+
+func (gs *LogFileRollover) filePath() string {
+	return filepath.Dir(gs.fileName())
 }
 
 /////////// util functions
