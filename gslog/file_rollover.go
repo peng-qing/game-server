@@ -1,13 +1,19 @@
 package gslog
 
 import (
+	"GameServer/utils"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"GameServer/common/stl"
 )
 
 // 检查实现 io.Closer 接口
@@ -25,6 +31,12 @@ const (
 	// 备份文件名格式化
 	backupTimeFormat = "2006-01-02T15:04:05.000"
 )
+
+// LogFileInfo 日志文件元数据
+type LogFileInfo struct {
+	timestamp time.Time
+	fileInfo  os.FileInfo
+}
 
 // LogFileRollover 文件日志分割器
 // 对File进行包装 实现io.Writer便于集成到log尽量对logger无感
@@ -45,7 +57,14 @@ type LogFileRollover struct {
 
 	// 当前文件大小
 	size int64
-	mu   sync.Mutex
+	// 锁
+	mu sync.Mutex
+	// 负责切割文件协程控制
+	once      sync.Once       // 确保只创建一个
+	ctx       context.Context // 控制协程退出
+	ctxCancel context.CancelFunc
+	// 通知子协程进行切割&压缩信号
+	millChan chan struct{}
 }
 
 /////////// constructs
@@ -102,6 +121,8 @@ func (gs *LogFileRollover) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
+// Close 调用对外的Close意味着关闭了这个io
+// 内部信号channel和子协程一起会被关闭和退出
 func (gs *LogFileRollover) Close() error {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
@@ -169,7 +190,7 @@ func (gs *LogFileRollover) openNew() error {
 func (gs *LogFileRollover) rotate() error {
 	var err error
 	// 先关闭旧的
-	if err = gs.close(); err != nil {
+	if err = gs.closeFile(); err != nil {
 		return err
 	}
 	// 再开新的
@@ -180,13 +201,128 @@ func (gs *LogFileRollover) rotate() error {
 	return nil
 }
 
-func (gs *LogFileRollover) close() (err error) {
+func (gs *LogFileRollover) mill() error {
+	gs.once.Do(func() {
+		gs.millChan = make(chan struct{}, 1)
+		go gs.millRun()
+	})
+
+	select {
+	case gs.millChan <- struct{}{}:
+	default:
+	}
+
+	return nil
+}
+
+func (gs *LogFileRollover) millRun() {
+	for {
+		select {
+		case <-gs.ctx.Done():
+			return
+		case <-gs.millChan:
+			_ = gs.millExec()
+		}
+	}
+}
+
+func (gs *LogFileRollover) millExec() error {
+	if gs.maxAge == 0 && gs.maxBackups == 0 && !gs.compress {
+		return nil
+	}
+	var err error
+	// 加载出日志文件列表
+	logFiles, err := gs.loadFileList()
+	if err != nil {
+		return errors.Join(err)
+	}
+
+	removed := make([]*LogFileInfo, 0)
+	// 移除超出备份数量的日志
+	if gs.maxBackups > 0 && len(logFiles) >= gs.maxBackups {
+		savedSet := stl.NewSet[string]()
+		remaining := make([]*LogFileInfo, 0)
+		for _, logFile := range logFiles {
+			filename := logFile.fileInfo.Name()
+			if strings.HasSuffix(filename, compressSuffix) {
+				filename = strings.TrimSuffix(filename, compressSuffix)
+			}
+			// 标记为保留
+			savedSet.Insert(filename)
+			if savedSet.Size() > gs.maxBackups {
+				removed = append(removed, logFile)
+				continue
+			}
+			remaining = append(remaining, logFile)
+		}
+		// 剩余文件
+		logFiles = remaining
+	}
+	// 移除到期
+	if gs.maxAge > 0 {
+		remaining := make([]*LogFileInfo, 0)
+		// 截至时间
+		diff := time.Duration(int64(24*gs.maxAge) * int64(time.Hour))
+		cutOffTm := time.Now().Add(-1 * diff)
+		for _, logFile := range logFiles {
+			// 早于截至时间删除
+			if logFile.timestamp.Before(cutOffTm) {
+				removed = append(removed, logFile)
+				continue
+			}
+			remaining = append(remaining, logFile)
+		}
+		logFiles = remaining
+	}
+	// 删除
+	for _, logFile := range removed {
+		errRemove := os.Remove(filepath.Join(gs.filePath(), logFile.fileInfo.Name()))
+		if errRemove != nil {
+			err = errors.Join(err, errRemove)
+			continue
+		}
+	}
+	// 压缩
+	if gs.compress {
+		for _, logFile := range logFiles {
+			if strings.HasSuffix(logFile.fileInfo.Name(), compressSuffix) {
+				continue
+			}
+			// 压缩文件
+			filename := filepath.Join(gs.filePath(), logFile.fileInfo.Name())
+			errCompress := utils.CompressFileByGzip(filename, filename+compressSuffix)
+			if errCompress != nil {
+				err = errors.Join(err, errCompress)
+				continue
+			}
+		}
+	}
+
+	return err
+}
+
+func (gs *LogFileRollover) closeFile() (err error) {
 	if gs.file != nil {
 		err = gs.file.Close()
 		gs.file = nil
 	}
 
 	return err
+}
+
+func (gs *LogFileRollover) close() error {
+	err := gs.closeFile()
+	if err != nil {
+		return err
+	}
+
+	if gs.ctxCancel != nil {
+		gs.ctxCancel()
+	}
+
+	close(gs.millChan)
+
+	return nil
 }
 
 func (gs *LogFileRollover) fileName() string {
@@ -209,6 +345,47 @@ func (gs *LogFileRollover) filePath() string {
 	return filepath.Dir(gs.fileName())
 }
 
+func (gs *LogFileRollover) loadFileList() ([]*LogFileInfo, error) {
+	entries, err := os.ReadDir(gs.filePath())
+	if err != nil {
+		return nil, err
+	}
+
+	filename := gs.fileName()
+	ext := filepath.Ext(filename)
+	prefix := strings.TrimSuffix(filename, ext)
+
+	logFiles := make([]*LogFileInfo, 0)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		fileInfo, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		// 解析日志文件名
+		if ts, err := timeFromFileName(fileInfo.Name(), prefix, ext); err == nil {
+			logFiles = append(logFiles, &LogFileInfo{
+				timestamp: ts,
+				fileInfo:  fileInfo,
+			})
+			continue
+		}
+		if ts, err := timeFromFileName(entry.Name(), prefix, ext+compressSuffix); err == nil {
+			logFiles = append(logFiles, &LogFileInfo{
+				timestamp: ts,
+				fileInfo:  fileInfo,
+			})
+		}
+		// 不满足设置的文件格式 当其他文件不进行处理
+	}
+	// 排序
+	sort.Sort(sortableLogFiles(logFiles))
+
+	return logFiles, nil
+}
+
 /////////// util functions
 
 func backupName(name string) string {
@@ -219,4 +396,33 @@ func backupName(name string) string {
 	nowTm := time.Now()
 
 	return filepath.Join(dir, fmt.Sprintf("%s_%s%s", prefix, nowTm.Format(backupTimeFormat), ext))
+}
+
+func timeFromFileName(name, prefix, ext string) (time.Time, error) {
+	// 前缀
+	if !strings.HasPrefix(name, prefix) {
+		return time.Time{}, errors.New("invalid file name not prefix")
+	}
+	// 后缀
+	if !strings.HasSuffix(name, ext) {
+		return time.Time{}, errors.New("invalid file name not suffix")
+	}
+
+	ts := name[len(prefix) : len(name)-len(ext)]
+	return time.Parse(backupTimeFormat, ts)
+}
+
+// 对LogFileInfos 进行排序 按照时间距离当前时间点 近->远
+type sortableLogFiles []*LogFileInfo
+
+func (gs sortableLogFiles) Len() int {
+	return len(gs)
+}
+
+func (gs sortableLogFiles) Less(i, j int) bool {
+	return gs[i].timestamp.After(gs[j].timestamp)
+}
+
+func (gs sortableLogFiles) Swap(i, j int) {
+	gs[i], gs[j] = gs[j], gs[i]
 }
