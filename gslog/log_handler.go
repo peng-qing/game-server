@@ -40,6 +40,9 @@ func newCommonHandler(writeSyncer io.Writer, opts ...Options) *commonHandler {
 }
 
 func (gs *commonHandler) Enabled(_ context.Context, levelEnabler LevelEnabler) bool {
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+
 	if gs.opts == nil {
 		return TraceLevel.Enabled(levelEnabler.Level())
 	}
