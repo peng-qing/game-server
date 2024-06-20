@@ -1,12 +1,10 @@
 ## 日志
 
-
 #### 期望
 
 1. 支持结构化日志
 2. 对于不同的WriteSyncer支持不同的LevelEnabler
 3. 优化日志格式化处理方式
-
 
 #### 实现
 
@@ -39,7 +37,7 @@ type commonHandler struct {
 
 (理论上，Options应该做的更通用)
 
-对于日志参数，可选部分都会最终构成一组 `Fields`。可选参数会依次按照输入数量最终构成不同的 `Field`（最好保证key是string，否则可能出现 ）。
+对于日志参数，可选部分都会最终构成一组 `Fields`。可选参数会依次按照输入数量最终构成不同的 `Field`（最好保证key是string，否则可能出现"badFieldsKey"）。
 
 ```go
 type Field struct {
