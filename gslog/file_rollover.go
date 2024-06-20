@@ -1,7 +1,6 @@
 package gslog
 
 import (
-	"GameServer/utils"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"GameServer/common/stl"
+	"GameServer/utils"
 )
 
 // 检查实现 io.Closer 接口
@@ -29,7 +29,7 @@ const (
 	// 追加文件不存在时文件后缀
 	defaultNotExistFileSuffix = "-gs_rollover.log"
 	// 备份文件名格式化
-	backupTimeFormat = "2006-01-02T15:04:05.000"
+	backupTimeFormat = "2006-01-02T15-04-05.000"
 )
 
 // LogFileInfo 日志文件元数据
@@ -157,7 +157,7 @@ func (gs *LogFileRollover) tryOpenOrCreateFile(rewriteSize int64) error {
 	gs.file = file
 	gs.size = info.Size()
 
-	return nil
+	return gs.mill()
 }
 
 func (gs *LogFileRollover) openNew() error {
@@ -198,12 +198,15 @@ func (gs *LogFileRollover) rotate() error {
 		return err
 	}
 
-	return nil
+	return gs.mill()
 }
 
 func (gs *LogFileRollover) mill() error {
 	gs.once.Do(func() {
 		gs.millChan = make(chan struct{}, 1)
+		ctx, cancel := context.WithCancel(context.Background())
+		gs.ctx = ctx
+		gs.ctxCancel = cancel
 		go gs.millRun()
 	})
 
@@ -304,7 +307,6 @@ func (gs *LogFileRollover) millExec() error {
 func (gs *LogFileRollover) closeFile() (err error) {
 	if gs.file != nil {
 		err = gs.file.Close()
-		gs.file = nil
 	}
 
 	return err
@@ -318,9 +320,8 @@ func (gs *LogFileRollover) close() error {
 
 	if gs.ctxCancel != nil {
 		gs.ctxCancel()
+		close(gs.millChan)
 	}
-
-	close(gs.millChan)
 
 	return nil
 }
@@ -351,9 +352,9 @@ func (gs *LogFileRollover) loadFileList() ([]*LogFileInfo, error) {
 		return nil, err
 	}
 
-	filename := gs.fileName()
+	filename := filepath.Base(gs.fileName())
 	ext := filepath.Ext(filename)
-	prefix := strings.TrimSuffix(filename, ext)
+	prefix := strings.TrimSuffix(filename, ext) + "_"
 
 	logFiles := make([]*LogFileInfo, 0)
 	for _, entry := range entries {
@@ -377,6 +378,7 @@ func (gs *LogFileRollover) loadFileList() ([]*LogFileInfo, error) {
 				timestamp: ts,
 				fileInfo:  fileInfo,
 			})
+			continue
 		}
 		// 不满足设置的文件格式 当其他文件不进行处理
 	}
