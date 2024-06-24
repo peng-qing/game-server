@@ -15,7 +15,7 @@ type Field struct {
 
 ////// constructs
 
-func Sting[T types.String](key string, val T) Field {
+func String[T types.String](key string, val T) Field {
 	return Field{
 		Key:   key,
 		Value: StringFieldValue(string(val)),
@@ -154,7 +154,7 @@ func argsToFields(args ...any) (Field, []any) {
 		return v, args[1:]
 	case string:
 		if len(args) == 1 {
-			return Sting[string](badFieldsKey, v), nil
+			return String[string](badFieldsKey, v), nil
 		}
 		return Any(v, args[1]), args[2:]
 	default:
