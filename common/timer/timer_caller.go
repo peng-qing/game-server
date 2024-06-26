@@ -2,6 +2,7 @@ package timer
 
 import (
 	"runtime/debug"
+	"time"
 
 	"GameServer/gslog"
 )
@@ -13,22 +14,22 @@ type ITimerCallback interface {
 
 type ITimerCaller interface {
 	ITimerCallback
-	IdentifyID() uint64      // 获取定时器识别id
-	CallbackParam() any      // 获取定时器回调参数
-	CallTimerCallback() bool // 调用回调
-	CallInterval() int64     // 调用间隔
-	NextCallTime() int64     // 获取调用时间
+	IdentifyID() uint64          // 获取定时器识别id
+	CallbackParam() any          // 获取定时器回调参数
+	CallTimerCallback() bool     // 调用回调
+	CallInterval() time.Duration // 调用间隔
+	NextCallTime() time.Time     // 获取调用时间
 }
 
 type TimerCaller struct {
 	ITimerCallback
-	identifyID    uint64 // 定时器识别码
-	callbackParam any    // 定时器回调参数
-	nextCallTime  int64  // 下次调用时间
-	callInterval  int64  // 调用间隔
+	identifyID    uint64        // 定时器识别码
+	callbackParam any           // 定时器回调参数
+	nextCallTime  time.Time     // 下次调用时间
+	callInterval  time.Duration // 调用间隔
 }
 
-func NewTimerCaller(identifyID uint64, callback ITimerCallback, param any, nextCallTime, callInterval int64) *TimerCaller {
+func NewTimerCaller(identifyID uint64, callback ITimerCallback, param any, nextCallTime time.Time, callInterval time.Duration) *TimerCaller {
 	return &TimerCaller{
 		ITimerCallback: callback,
 		identifyID:     identifyID,
@@ -69,7 +70,7 @@ func (gs *TimerCaller) CallTimerCallback() bool {
 	return gs.OnTimer(gs.IdentifyID(), gs.CallbackParam())
 }
 
-func (gs *TimerCaller) CallInterval() int64 {
+func (gs *TimerCaller) CallInterval() time.Duration {
 	if gs == nil {
 		gslog.Error("[TimerCaller] GetCallInterval caller is nil")
 		return 0
@@ -77,10 +78,11 @@ func (gs *TimerCaller) CallInterval() int64 {
 	return gs.callInterval
 }
 
-func (gs *TimerCaller) NextCallTime() int64 {
+func (gs *TimerCaller) NextCallTime() time.Time {
 	if gs == nil {
 		gslog.Error("[TimerCaller] GetCallTime caller is nil")
-		return 0
+		return time.Time{}
 	}
+
 	return gs.nextCallTime
 }
