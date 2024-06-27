@@ -4,6 +4,7 @@ import (
 	"GameServer/gslog"
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type TimeScheduler struct {
 	mutex        sync.Mutex         // 互斥锁
 }
 
+// NewTimeScheduler 创建时间轮调度器
 func NewTimeScheduler(options ...Options) *TimeScheduler {
 	instance := &TimeScheduler{
 		IdentifyID: 0,
@@ -49,15 +51,21 @@ func NewTimeScheduler(options ...Options) *TimeScheduler {
 		instance.topTimeWheel = hourWheel
 	}
 
+	instance.Run()
+
 	return instance
 }
 
+// NewAutoTimeScheduler 创建时间轮调度器 自动任务调度
 func NewAutoTimeScheduler(options ...Options) *TimeScheduler {
 	autoExecTimeScheduler := NewTimeScheduler(options...)
+
+	autoExecTimeScheduler.Execute()
 
 	return autoExecTimeScheduler
 }
 
+// Run 后台线程处理调度
 func (gs *TimeScheduler) Run() {
 	go func() {
 		defer func() {
@@ -87,6 +95,7 @@ func (gs *TimeScheduler) Run() {
 	}()
 }
 
+// Execute 自动执行调度时调用
 func (gs *TimeScheduler) Execute() {
 	go func() {
 		defer func() {
@@ -103,4 +112,52 @@ func (gs *TimeScheduler) Execute() {
 			}
 		}
 	}()
+}
+
+// TriggerChan 获取任务执行队列
+func (gs *TimeScheduler) TriggerChan() chan ITimerCaller {
+	return gs.triggerChan
+}
+
+// Stop 停止调度 多级时间轮同时停止
+func (gs *TimeScheduler) Stop() {
+	gs.cancel()
+	gs.ticker.Stop()
+	close(gs.triggerChan)
+}
+
+// AddTimer 添加定时器
+func (gs *TimeScheduler) AddTimer(callback ITimerCallback, param any, nextCallTime time.Time, callInterval time.Duration) int64 {
+	if gs == nil {
+		gslog.Error("[TimeScheduler] AddTimer called but TimeScheduler is nil")
+		return 0
+	}
+
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+
+	identifyID := atomic.LoadInt64(&gs.IdentifyID)
+	timerCaller := NewTimerCaller(identifyID, callback, param, nextCallTime, callInterval)
+
+	gs.topTimeWheel.AddTimer(identifyID, timerCaller)
+
+	return identifyID
+}
+
+// CancelTimer 关闭注册定时器
+func (gs *TimeScheduler) CancelTimer(identifyID int64) {
+	if gs == nil {
+		gslog.Error("[TimeScheduler] CancelTimer called but TimeScheduler is nil")
+		return
+	}
+
+	gs.mutex.Lock()
+	defer gs.mutex.Unlock()
+
+	curTimeWheel := gs.topTimeWheel
+
+	for curTimeWheel != nil {
+		curTimeWheel.RemoveTimer(identifyID)
+		curTimeWheel = curTimeWheel.nextTimeWheel
+	}
 }

@@ -9,12 +9,12 @@ import (
 
 // ITimerCallback 定时器回调, 所有需要定时器的功能都应该实现该接口
 type ITimerCallback interface {
-	OnTimer(identifyID uint64, param any) bool
+	OnTimer(identifyID int64, param any) bool
 }
 
 type ITimerCaller interface {
 	ITimerCallback
-	IdentifyID() uint64          // 获取定时器识别id
+	IdentifyID() int64           // 获取定时器识别id
 	CallbackParam() any          // 获取定时器回调参数
 	CallTimerCallback() bool     // 调用回调
 	CallInterval() time.Duration // 调用间隔
@@ -23,13 +23,13 @@ type ITimerCaller interface {
 
 type TimerCaller struct {
 	ITimerCallback
-	identifyID    uint64        // 定时器识别码
+	identifyID    int64         // 定时器识别码
 	callbackParam any           // 定时器回调参数
 	nextCallTime  time.Time     // 下次调用时间
 	callInterval  time.Duration // 调用间隔
 }
 
-func NewTimerCaller(identifyID uint64, callback ITimerCallback, param any, nextCallTime time.Time, callInterval time.Duration) *TimerCaller {
+func NewTimerCaller(identifyID int64, callback ITimerCallback, param any, nextCallTime time.Time, callInterval time.Duration) *TimerCaller {
 	return &TimerCaller{
 		ITimerCallback: callback,
 		identifyID:     identifyID,
@@ -39,7 +39,7 @@ func NewTimerCaller(identifyID uint64, callback ITimerCallback, param any, nextC
 	}
 }
 
-func (gs *TimerCaller) IdentifyID() uint64 {
+func (gs *TimerCaller) IdentifyID() int64 {
 	if gs == nil {
 		gslog.Error("[TimerCaller] IdentifyID caller is nil")
 		return 0
