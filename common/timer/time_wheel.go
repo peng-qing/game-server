@@ -4,6 +4,7 @@ import (
 	"GameServer/gslog"
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type TimeWheel struct {
 	nextTimeWheel *TimeWheel                     // 下一级时间轮
 	ctx           context.Context                // context 用于关闭时间轮
 	ticker        *time.Ticker                   // 用于时间轮转动
+	running       atomic.Bool                    // 时间轮是否已经启动 避免重复启动
 	mutex         sync.Mutex                     // 锁
 }
 
@@ -46,6 +48,7 @@ func NewTimeWheel(ctx context.Context, name string, interval time.Duration, scal
 		onceStop:      sync.Once{},
 		nextTimeWheel: nil,
 		ctx:           ctx,
+		running:       atomic.Bool{},
 		mutex:         sync.Mutex{},
 	}
 
@@ -70,17 +73,15 @@ func (gs *TimeWheel) addTimer(identifyID int64, caller ITimerCaller, forceNext b
 		}
 	}()
 
+	now := time.Now()
 	callTime := caller.NextCallTime()
 	if callTime.IsZero() {
 		gslog.Error("[TimeWheel] caller time is zero", "identifyID", identifyID)
 		return
 	}
-	if callTime.Before(time.Now()) {
-		gslog.Warn("[TimeWheel] caller time before now", "callTime", callTime.Unix(), "identifyID", identifyID)
-		return
-	}
+
 	// 需要跨越几个刻度
-	delayScales := callTime.Sub(time.Now()) / gs.interval
+	delayScales := callTime.Sub(now) / gs.interval
 	// 如果大于一个刻度
 	if delayScales >= 1 {
 		targetScales := (gs.current + int(delayScales)) % gs.scales
@@ -186,18 +187,17 @@ func (gs *TimeWheel) AddTimerWheel(nextTimerWheel *TimeWheel) {
 
 // GetTimerWithDuration 获取一定时间间隔内的所有timer
 func (gs *TimeWheel) GetTimerWithDuration(interval time.Duration) map[int64]ITimerCaller {
-	gs.mutex.Lock()
-	defer gs.mutex.Unlock()
-
 	// 找到最底层时间轮
 	curTimeWheel := gs
-	if curTimeWheel.nextTimeWheel != nil {
+	for curTimeWheel.nextTimeWheel != nil {
 		curTimeWheel = curTimeWheel.nextTimeWheel
 	}
 
+	curTimeWheel.mutex.Lock()
+	defer curTimeWheel.mutex.Unlock()
+
 	now := time.Now()
 	timerMap := make(map[int64]ITimerCaller)
-
 	for identifyID, caller := range curTimeWheel.timeQueue[curTimeWheel.current] {
 		callTime := caller.NextCallTime()
 		if callTime.Before(now.Add(interval)) {
@@ -211,6 +211,9 @@ func (gs *TimeWheel) GetTimerWithDuration(interval time.Duration) map[int64]ITim
 }
 
 func (gs *TimeWheel) Start() {
+	if !gs.running.CompareAndSwap(false, true) {
+		return
+	}
 	gs.ticker = time.NewTicker(gs.interval)
 
 	go gs.run()

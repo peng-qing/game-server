@@ -1,11 +1,11 @@
 package timer
 
 type Options interface {
-	apply(scheduler *TimeScheduler)
+	apply(scheduler *TimerScheduler)
 }
 
-type OptionFunc func(scheduler *TimeScheduler)
+type OptionFunc func(scheduler *TimerScheduler)
 
-func (f OptionFunc) apply(scheduler *TimeScheduler) {
+func (f OptionFunc) apply(scheduler *TimerScheduler) {
 	f(scheduler)
 }
