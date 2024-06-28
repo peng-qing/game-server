@@ -204,7 +204,6 @@ func (gs *TimeWheel) GetTimerWithDuration(interval time.Duration) map[int64]ITim
 			// 定时器已经超时
 			timerMap[identifyID] = caller
 			delete(curTimeWheel.timeQueue[curTimeWheel.current], identifyID)
-			gslog.Info("[TimeWheel] delete timer", "timeWheelName", curTimeWheel.name, "identifyID", identifyID, "current", curTimeWheel.current)
 		}
 	}
 
