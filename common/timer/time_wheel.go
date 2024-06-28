@@ -141,7 +141,7 @@ func (gs *TimeWheel) rotate() {
 	}
 	// 下一个刻度的定时器也重新添加
 	nextScaleTimers := gs.timeQueue[(gs.current+1)%gs.scales]
-	gs.timeQueue[(gs.current+1)%gs.scales] = nextScaleTimers
+	gs.timeQueue[(gs.current+1)%gs.scales] = make(map[int64]ITimerCaller)
 	for identifyID, caller := range nextScaleTimers {
 		gs.addTimer(identifyID, caller, true)
 	}
@@ -204,6 +204,7 @@ func (gs *TimeWheel) GetTimerWithDuration(interval time.Duration) map[int64]ITim
 			// 定时器已经超时
 			timerMap[identifyID] = caller
 			delete(curTimeWheel.timeQueue[curTimeWheel.current], identifyID)
+			gslog.Info("[TimeWheel] delete timer", "timeWheelName", curTimeWheel.name, "identifyID", identifyID, "current", curTimeWheel.current)
 		}
 	}
 
