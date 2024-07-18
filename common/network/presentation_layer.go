@@ -8,6 +8,9 @@ import (
 	"GameServer/gslog"
 )
 
+// 提供表示层的相关实现
+
+// JsonPresentation Json形式
 type JsonPresentation struct{}
 
 func NewJsonPresentation() PresentationLayer {
@@ -22,6 +25,7 @@ func (j JsonPresentation) Encode(src any) (dst []byte, err error) {
 	return json.Marshal(src)
 }
 
+// PBPresentation Proto Buffer
 type PBPresentation struct{}
 
 func NewPBPresentation() PresentationLayer {
