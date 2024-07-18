@@ -93,7 +93,7 @@ func DecodeVariableInt64(data []byte) (int64, error) {
 		}
 		digit := data[0]
 		data = data[1:]
-		
+
 		num |= uint64(digit&0x7F) << shift
 		if digit&0x80 == 0 {
 			break

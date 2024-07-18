@@ -1,5 +1,7 @@
 package network
 
+import "io"
+
 type (
 	// ApplicationLayer 应用层
 	// 最顶层业务 表示一个服务
@@ -12,7 +14,7 @@ type (
 	}
 
 	// PresentationLayer 表示层
-	// 数据格式转换, 加密和压缩
+	// 应用层数据格式转换, 加密和压缩
 	PresentationLayer interface {
 		Decode(src []byte, dst any) error
 		Encode(src any) (dst []byte, err error)
@@ -23,5 +25,16 @@ type (
 	ConnectionLayer interface {
 		// ConnectionID 连接ID
 		ConnectionID() int64
+	}
+
+	// ControlPackage 连接层控制报文
+	ControlPackage interface {
+		String() string
+	}
+
+	// ControlPacker 连接层控制报文封包/解包
+	ControlPacker interface {
+		Pack(pkg ControlPackage) ([]byte, error)
+		Unpack(r io.Reader) (ControlPackage, error)
 	}
 )
