@@ -63,9 +63,11 @@ func DecodeVariableInt(data []byte) (int, error) {
 	var shift uint32
 
 	for shift < 28 {
-		length := len(data)
-		digit := data[length-1]
-		data = data[:length-1]
+		if len(data) <= 0 {
+			break
+		}
+		digit := data[0]
+		data = data[1:]
 
 		num |= uint32(digit&0x7F) << shift
 		if digit&0x80 == 0 {
@@ -86,10 +88,12 @@ func DecodeVariableInt64(data []byte) (int64, error) {
 	var shift uint64
 
 	for shift < 56 {
-		length := len(data)
-		digit := data[length-1]
-		data = data[:length-1]
-
+		if len(data) <= 0 {
+			break
+		}
+		digit := data[0]
+		data = data[1:]
+		
 		num |= uint64(digit&0x7F) << shift
 		if digit&0x80 == 0 {
 			break
