@@ -27,14 +27,17 @@ type (
 		ConnectionID() int64
 	}
 
-	// ControlPackage 连接层控制报文
-	ControlPackage interface {
+	// ControlPacket 连接层控制报文
+	ControlPacket interface {
+		Name() string
 		String() string
+		Validate() error
 	}
 
 	// ControlPacker 连接层控制报文封包/解包
 	ControlPacker interface {
-		Pack(pkg ControlPackage) ([]byte, error)
-		Unpack(r io.Reader) (ControlPackage, error)
+		Pack(packet ControlPacket) ([]byte, error)
+		Unpack(r io.Reader) (ControlPacket, error)
+		WriteTo(w io.Writer, packet ControlPacket) (int64, error)
 	}
 )
