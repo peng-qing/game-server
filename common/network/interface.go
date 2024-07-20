@@ -31,7 +31,7 @@ type (
 	ControlPacket interface {
 		Name() string
 		String() string
-		Validate() error
+		Validate() int
 	}
 
 	// ControlPacker 连接层控制报文封包/解包
