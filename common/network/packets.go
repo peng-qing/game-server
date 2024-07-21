@@ -59,6 +59,10 @@ func (gs *FixedHeader) String() string {
 	return fmt.Sprintf("[%s] RemainLength: %d", PacketNames[gs.PacketType], gs.RemainLength)
 }
 
+func (gs *FixedHeader) Name() string {
+	return PacketNames[gs.PacketType]
+}
+
 // Pack 打包固定包头
 func (gs *FixedHeader) Pack() bytes.Buffer {
 	var header bytes.Buffer
@@ -78,15 +82,60 @@ func (gs *FixedHeader) UnPack(packetType PacketType, r io.Reader) error {
 	return err
 }
 
+// NewControlPacket 创建协议包
+func NewControlPacket(packetType PacketType) ControlPacket {
+	fixedHeader := FixedHeader{PacketType: packetType}
+
+	switch packetType {
+	case Connect:
+		return &ConnectPacket{FixedHeader: fixedHeader}
+	case ConnectAck:
+		return &ConnectAckPacket{FixedHeader: fixedHeader}
+	case Heartbeat:
+		return &HeartbeatPacket{FixedHeader: fixedHeader}
+	case HeartbeatAck:
+		return &HeartbeatAckPacket{FixedHeader: fixedHeader}
+	case Publish:
+		return &PublishPacket{FixedHeader: fixedHeader}
+	case PublishAck:
+		return &PublishAckPacket{FixedHeader: fixedHeader}
+	case DisConnect:
+		return &DisConnectPacket{FixedHeader: fixedHeader}
+	case Invalid:
+		fallthrough
+	default:
+		return nil
+	}
+}
+
+func NewControlPacketWithHeader(fh FixedHeader) ControlPacket {
+	switch fh.PacketType {
+	case Connect:
+		return &ConnectPacket{FixedHeader: fh}
+	case ConnectAck:
+		return &ConnectAckPacket{FixedHeader: fh}
+	case Heartbeat:
+		return &HeartbeatPacket{FixedHeader: fh}
+	case HeartbeatAck:
+		return &HeartbeatAckPacket{FixedHeader: fh}
+	case Publish:
+		return &PublishPacket{FixedHeader: fh}
+	case PublishAck:
+		return &PublishAckPacket{FixedHeader: fh}
+	case DisConnect:
+		return &DisConnectPacket{FixedHeader: fh}
+	case Invalid:
+		fallthrough
+	default:
+		return nil
+	}
+}
+
 type ConnectPacket struct {
 	FixedHeader
 	ProtocolVersion  int    // 协议版本
 	Keepalive        int    // 心跳时间
 	ClientIdentifier string // 客户端唯一标识
-}
-
-func (gs *ConnectPacket) Name() string {
-	return PacketNames[gs.FixedHeader.PacketType]
 }
 
 func (gs *ConnectPacket) Validate() int {
@@ -101,4 +150,69 @@ func (gs *ConnectPacket) Validate() int {
 func (gs *ConnectPacket) String() string {
 	return fmt.Sprintf("%s ,protocolVersion:%d, keepalive:%d, clientIdentifier:%s",
 		gs.FixedHeader.String(), gs.ProtocolVersion, gs.Keepalive, gs.ClientIdentifier)
+}
+
+type ConnectAckPacket struct {
+	FixedHeader
+	ReturnCode int
+}
+
+func (gs *ConnectAckPacket) Validate() int {
+
+	return 0
+}
+
+func (gs *ConnectAckPacket) String() string {
+	return fmt.Sprintf("%s , returnCode:%d", gs.FixedHeader.String(), gs.ReturnCode)
+}
+
+type HeartbeatPacket struct {
+	FixedHeader
+}
+
+func (gs *HeartbeatPacket) Validate() int {
+	return 0
+}
+
+type HeartbeatAckPacket struct {
+	FixedHeader
+}
+
+func (gs *HeartbeatAckPacket) Validate() int {
+	return 0
+}
+
+type DisConnectPacket struct {
+	FixedHeader
+}
+
+func (gs *DisConnectPacket) Validate() int {
+	return 0
+}
+
+type PublishPacket struct {
+	FixedHeader
+	MessageID uint32
+	Payload   []byte
+}
+
+func (gs *PublishPacket) Validate() int {
+	return 0
+}
+
+func (gs *PublishPacket) String() string {
+	return fmt.Sprintf("%s , MessageID:%d, Payload:%s", gs.FixedHeader.String(), gs.MessageID, string(gs.Payload))
+}
+
+type PublishAckPacket struct {
+	FixedHeader
+	MessageID uint32
+}
+
+func (gs *PublishAckPacket) Validate() int {
+	return 0
+}
+
+func (gs *PublishAckPacket) String() string {
+	return fmt.Sprintf("%s , MessageID:%d, Payload:%s", gs.FixedHeader.String(), gs.MessageID)
 }
