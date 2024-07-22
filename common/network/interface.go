@@ -1,6 +1,9 @@
 package network
 
-import "io"
+import (
+	"encoding/binary"
+	"io"
+)
 
 type (
 	// ApplicationLayer 应用层
@@ -32,12 +35,8 @@ type (
 		Name() string
 		String() string
 		Validate() int
-	}
-
-	// ControlPacker 连接层控制报文封包/解包
-	ControlPacker interface {
-		Pack(packet ControlPacket) ([]byte, error)
-		Unpack(r io.Reader) (ControlPacket, error)
-		WriteTo(w io.Writer, packet ControlPacket) (int64, error)
+		Pack(order binary.ByteOrder) ([]byte, error)
+		Unpack(r io.Reader, order binary.ByteOrder) error
+		WriteTo(w io.Writer, order binary.ByteOrder) (int64, error)
 	}
 )

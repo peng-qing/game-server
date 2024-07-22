@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
 )
@@ -9,9 +10,9 @@ var (
 	ErrInvalidBuffer = errors.New("invalid bytes buffer")
 )
 
-// EncodeVariable 变长int/int64编码 对于小于128的值采用单字节编码
+// EncodeVariableInt 变长int/int64编码 对于小于128的值采用单字节编码
 // 高出的值采取 低7位编码有效数据,可以编码128个数值; 最高位延续位指示后续是否还有剩余字节
-func EncodeVariable(num int64) []byte {
+func EncodeVariableInt(num int64) []byte {
 	var enc []byte
 
 	for {
@@ -37,7 +38,7 @@ func DecodeReaderVariableInt(r io.Reader) (int, error) {
 	var bs = make([]byte, 1)
 
 	for shift < 28 {
-		_, err = io.ReadFull(r, bs)
+		_, err = r.Read(bs)
 		if err != nil {
 			return 0, err
 		}
@@ -111,7 +112,7 @@ func DecodeReaderVariableInt64(r io.Reader) (int64, error) {
 	var bs = make([]byte, 1)
 
 	for shift < 56 {
-		_, err = io.ReadFull(r, bs)
+		_, err = r.Read(bs)
 		if err != nil {
 			return 0, err
 		}
@@ -125,4 +126,52 @@ func DecodeReaderVariableInt64(r io.Reader) (int64, error) {
 	}
 
 	return int64(num), err
+}
+
+func EncodeBytes(field []byte, order binary.ByteOrder) []byte {
+	length := make([]byte, 4)
+	order.PutUint32(length, uint32(len(field)))
+	return append(length, field...)
+}
+
+func DecodeBytes(data []byte, order binary.ByteOrder) ([]byte, error) {
+	if len(data) < 4 {
+		return nil, ErrInvalidBuffer
+	}
+	length := order.Uint32(data[:4])
+	field := make([]byte, length)
+	copy(field, data[4:])
+
+	return field, nil
+}
+
+func DecodeReaderBytes(r io.Reader, order binary.ByteOrder) ([]byte, error) {
+	num := make([]byte, 4)
+	_, err := r.Read(num)
+	if err != nil {
+		return nil, err
+	}
+	length := order.Uint32(num)
+
+	field := make([]byte, length)
+	_, err = r.Read(field)
+	if err != nil {
+		return nil, err
+	}
+
+	return field, nil
+}
+
+func EncodeString(str string, order binary.ByteOrder) []byte {
+	return EncodeBytes([]byte(str), order)
+}
+
+func DecodeString(data []byte, order binary.ByteOrder) (string, error) {
+	buf, err := DecodeBytes(data, order)
+	return string(buf), err
+}
+
+func DecodeReaderString(r io.Reader, order binary.ByteOrder) (string, error) {
+	buf, err := DecodeReaderBytes(r, order)
+	return string(buf), err
 }

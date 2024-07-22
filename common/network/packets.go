@@ -3,6 +3,7 @@ package network
 import (
 	"GameServer/utils"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -42,7 +43,7 @@ var (
 	ErrBadProtocolVersion       = errors.New("connection refused: bad protocol version")
 	ErrRefusedInvalidIdentifier = errors.New("connection refused: invalid client identifier")
 
-	RetcodeErrors = map[int]error{
+	RetCodeErrors = map[int]error{
 		Accepted:                  nil,
 		RefusedBadProtocolVersion: ErrBadProtocolVersion,
 		RefusedInvalidIdentifier:  ErrRefusedInvalidIdentifier,
@@ -68,7 +69,7 @@ func (gs *FixedHeader) Pack() bytes.Buffer {
 	var header bytes.Buffer
 
 	header.WriteByte(byte(gs.PacketType))
-	header.Write(utils.EncodeVariable(int64(gs.RemainLength)))
+	header.Write(utils.EncodeVariableInt(int64(gs.RemainLength)))
 
 	return header
 }
@@ -152,6 +153,39 @@ func (gs *ConnectPacket) String() string {
 		gs.FixedHeader.String(), gs.ProtocolVersion, gs.Keepalive, gs.ClientIdentifier)
 }
 
+func (gs *ConnectPacket) Pack(order binary.ByteOrder) ([]byte, error) {
+	var body bytes.Buffer
+	var err error
+
+	err = binary.Write(&body, order, gs.ProtocolVersion)
+	err = binary.Write(&body, order, gs.Keepalive)
+	err = binary.Write(&body, order, utils.EncodeString(gs.ClientIdentifier, order))
+
+	gs.FixedHeader.RemainLength = body.Len()
+	packet := gs.FixedHeader.Pack()
+	packet.Write(body.Bytes())
+
+	return packet.Bytes(), err
+}
+
+func (gs *ConnectPacket) Unpack(r io.Reader, order binary.ByteOrder) error {
+	var err error
+	err = binary.Read(r, order, &gs.ProtocolVersion)
+	err = binary.Read(r, order, &gs.Keepalive)
+	gs.ClientIdentifier, err = utils.DecodeReaderString(r, order)
+
+	return err
+}
+
+func (gs *ConnectPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64, error) {
+	data, err := gs.Pack(order)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(data)
+	return int64(n), err
+}
+
 type ConnectAckPacket struct {
 	FixedHeader
 	ReturnCode int
@@ -166,12 +200,60 @@ func (gs *ConnectAckPacket) String() string {
 	return fmt.Sprintf("%s , returnCode:%d", gs.FixedHeader.String(), gs.ReturnCode)
 }
 
+func (gs *ConnectAckPacket) Pack(order binary.ByteOrder) ([]byte, error) {
+	var body bytes.Buffer
+	var err error
+
+	err = binary.Write(&body, order, gs.ReturnCode)
+
+	gs.FixedHeader.RemainLength = body.Len()
+	packet := gs.FixedHeader.Pack()
+	packet.Write(body.Bytes())
+
+	return packet.Bytes(), err
+}
+
+func (gs *ConnectAckPacket) Unpack(r io.Reader, order binary.ByteOrder) error {
+	var err error
+	err = binary.Read(r, order, &gs.ReturnCode)
+
+	return err
+}
+
+func (gs *ConnectAckPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64, error) {
+	data, err := gs.Pack(order)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(data)
+	return int64(n), err
+}
+
 type HeartbeatPacket struct {
 	FixedHeader
 }
 
 func (gs *HeartbeatPacket) Validate() int {
 	return 0
+}
+
+func (gs *HeartbeatPacket) Pack(order binary.ByteOrder) ([]byte, error) {
+	packet := gs.FixedHeader.Pack()
+
+	return packet.Bytes(), nil
+}
+
+func (gs *HeartbeatPacket) Unpack(r io.Reader, order binary.ByteOrder) error {
+	return nil
+}
+
+func (gs *HeartbeatPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64, error) {
+	data, err := gs.Pack(order)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(data)
+	return int64(n), err
 }
 
 type HeartbeatAckPacket struct {
@@ -182,12 +264,50 @@ func (gs *HeartbeatAckPacket) Validate() int {
 	return 0
 }
 
+func (gs *HeartbeatAckPacket) Pack(order binary.ByteOrder) ([]byte, error) {
+	packet := gs.FixedHeader.Pack()
+
+	return packet.Bytes(), nil
+}
+
+func (gs *HeartbeatAckPacket) Unpack(r io.Reader, order binary.ByteOrder) error {
+	return nil
+}
+
+func (gs *HeartbeatAckPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64, error) {
+	data, err := gs.Pack(order)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(data)
+	return int64(n), err
+}
+
 type DisConnectPacket struct {
 	FixedHeader
 }
 
 func (gs *DisConnectPacket) Validate() int {
 	return 0
+}
+
+func (gs *DisConnectPacket) Pack(order binary.ByteOrder) ([]byte, error) {
+	packet := gs.FixedHeader.Pack()
+
+	return packet.Bytes(), nil
+}
+
+func (gs *DisConnectPacket) Unpack(r io.Reader, order binary.ByteOrder) error {
+	return nil
+}
+
+func (gs *DisConnectPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64, error) {
+	data, err := gs.Pack(order)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(data)
+	return int64(n), err
 }
 
 type PublishPacket struct {
@@ -204,6 +324,37 @@ func (gs *PublishPacket) String() string {
 	return fmt.Sprintf("%s , MessageID:%d, Payload:%s", gs.FixedHeader.String(), gs.MessageID, string(gs.Payload))
 }
 
+func (gs *PublishPacket) Pack(order binary.ByteOrder) ([]byte, error) {
+	var body bytes.Buffer
+	var err error
+
+	err = binary.Write(&body, order, gs.MessageID)
+	err = binary.Write(&body, order, utils.EncodeBytes(gs.Payload, order))
+
+	gs.FixedHeader.RemainLength = body.Len()
+	packet := gs.FixedHeader.Pack()
+	packet.Write(body.Bytes())
+
+	return packet.Bytes(), err
+}
+
+func (gs *PublishPacket) Unpack(r io.Reader, order binary.ByteOrder) error {
+	var err error
+	err = binary.Read(r, order, &gs.MessageID)
+	gs.Payload, err = utils.DecodeReaderBytes(r, order)
+
+	return err
+}
+
+func (gs *PublishPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64, error) {
+	data, err := gs.Pack(order)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(data)
+	return int64(n), err
+}
+
 type PublishAckPacket struct {
 	FixedHeader
 	MessageID uint32
@@ -215,4 +366,33 @@ func (gs *PublishAckPacket) Validate() int {
 
 func (gs *PublishAckPacket) String() string {
 	return fmt.Sprintf("%s , MessageID:%d, Payload:%s", gs.FixedHeader.String(), gs.MessageID)
+}
+
+func (gs *PublishAckPacket) Pack(order binary.ByteOrder) ([]byte, error) {
+	var body bytes.Buffer
+	var err error
+
+	err = binary.Write(&body, order, gs.MessageID)
+
+	gs.FixedHeader.RemainLength = body.Len()
+	packet := gs.FixedHeader.Pack()
+	packet.Write(body.Bytes())
+
+	return packet.Bytes(), err
+}
+
+func (gs *PublishAckPacket) Unpack(r io.Reader, order binary.ByteOrder) error {
+	var err error
+	err = binary.Read(r, order, &gs.MessageID)
+
+	return err
+}
+
+func (gs *PublishAckPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64, error) {
+	data, err := gs.Pack(order)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(data)
+	return int64(n), err
 }
