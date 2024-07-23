@@ -3,6 +3,8 @@ package network
 import (
 	"encoding/binary"
 	"io"
+	"net"
+	"time"
 )
 
 type (
@@ -26,8 +28,11 @@ type (
 	// ConnectionLayer 连接层
 	// 连接的抽象
 	ConnectionLayer interface {
+		net.Conn
 		// ConnectionID 连接ID
-		ConnectionID() int64
+		ConnectionID() string
+		// Heartbeat 心跳时间
+		Heartbeat() time.Duration
 	}
 
 	// ControlPacket 连接层控制报文

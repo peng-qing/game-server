@@ -40,6 +40,7 @@ var (
 		"DISCONNECT",
 	}
 
+	ErrInvalidPacketType        = errors.New("invalid packet type")
 	ErrBadProtocolVersion       = errors.New("connection refused: bad protocol version")
 	ErrRefusedInvalidIdentifier = errors.New("connection refused: invalid client identifier")
 
@@ -109,26 +110,26 @@ func NewControlPacket(packetType PacketType) ControlPacket {
 	}
 }
 
-func NewControlPacketWithHeader(fh FixedHeader) ControlPacket {
+func NewControlPacketWithHeader(fh FixedHeader) (ControlPacket, error) {
 	switch fh.PacketType {
 	case Connect:
-		return &ConnectPacket{FixedHeader: fh}
+		return &ConnectPacket{FixedHeader: fh}, nil
 	case ConnectAck:
-		return &ConnectAckPacket{FixedHeader: fh}
+		return &ConnectAckPacket{FixedHeader: fh}, nil
 	case Heartbeat:
-		return &HeartbeatPacket{FixedHeader: fh}
+		return &HeartbeatPacket{FixedHeader: fh}, nil
 	case HeartbeatAck:
-		return &HeartbeatAckPacket{FixedHeader: fh}
+		return &HeartbeatAckPacket{FixedHeader: fh}, nil
 	case Publish:
-		return &PublishPacket{FixedHeader: fh}
+		return &PublishPacket{FixedHeader: fh}, nil
 	case PublishAck:
-		return &PublishAckPacket{FixedHeader: fh}
+		return &PublishAckPacket{FixedHeader: fh}, nil
 	case DisConnect:
-		return &DisConnectPacket{FixedHeader: fh}
+		return &DisConnectPacket{FixedHeader: fh}, nil
 	case Invalid:
 		fallthrough
 	default:
-		return nil
+		return nil, ErrInvalidPacketType
 	}
 }
 
