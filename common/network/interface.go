@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -26,10 +27,19 @@ type (
 	}
 
 	// ConnectionLayer 连接层
-	// 连接的抽象
 	ConnectionLayer interface {
-		net.Conn
 		// ConnectionID 连接ID
+		ConnectionID() string
+		Read() chan ControlPacket
+		ReadPacket() ControlPacket
+		Write(ctx context.Context, packet ControlPacket) error
+		Close() error
+	}
+
+	//Connection 连接抽象封装
+	Connection interface {
+		net.Conn
+		// ConnectionID 连接标识
 		ConnectionID() string
 		// Heartbeat 心跳时间
 		Heartbeat() time.Duration

@@ -1,12 +1,13 @@
 package network
 
 import (
-	"GameServer/utils"
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+
+	"GameServer/utils"
 )
 
 type PacketType byte
