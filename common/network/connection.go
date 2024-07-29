@@ -1,5 +1,79 @@
 package network
 
+import (
+	"context"
+	"encoding/binary"
+	"fmt"
+	"net"
+	"time"
+
+	"GameServer/gslog"
+)
+
+func AcceptTcpConn(cfg *ConnectionConfig) (TcpConnFactory, error) {
+
+	addr, err := net.ResolveTCPAddr(cfg.IPVersion, fmt.Sprintf("%s:%d", cfg.IP, cfg.Port))
+	if err != nil {
+		return nil, err
+	}
+	listener, err := net.ListenTCP(cfg.IPVersion, addr)
+	if err != nil {
+		gslog.Error("[AcceptTcpConn] listen tcp failed", "ipVersion", cfg.IPVersion, "ip", cfg.IP, "port", cfg.Port)
+		return nil, err
+	}
+
+	// 是否应该是一个 Connection Hook 而不是所有参数都传递进去...
+	return func(ctx context.Context, readTimeout, writeTimeout time.Duration, byteOrder binary.ByteOrder) *net.TCPConn {
+		conn, err := listener.AcceptTCP()
+		if err != nil {
+			gslog.Critical("[TcpConnFactory] accept tcp conn failed", "addr", listener.Addr().String())
+			return nil
+		}
+		if readTimeout > 0 {
+			_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+		}
+		packet, err := ReadPacket(conn, byteOrder)
+		if err != nil {
+			gslog.Error("[TcpConnFactory] read packet failed", "err", err)
+			return nil
+		}
+		msg, ok := packet.(*ConnectPacket)
+		if !ok || msg.Validate() != Accepted {
+			return nil
+		}
+
+		return conn
+	}, nil
+
+	//	//	msg, err := ReadPacket(conn, cfg.ByteOrder)
+	//	//	if err != nil {
+	//	//		return nil, err
+	//	//	}
+	//	//	packet, ok := msg.(*ConnectPacket)
+	//	//	if !ok {
+	//	//		return nil, err
+	//	//	}
+	//	//	cfg.Version = packet.ProtocolVersion
+	//	//	cfg.KeepaliveInterval = packet.Keepalive
+	//	//	cfg.ConnectionID = packet.ClientIdentifier
+	//	//
+	//	//	// send connect_ack packet
+	//	//	ackPacket := NewControlPacket(ConnectAck).(*ConnectAckPacket)
+	//	//	if cfg.WriteTimeout != 0 {
+	//	//		_ = conn.SetWriteDeadline(time.Now().Add(cfg.WriteTimeout))
+	//	//	}
+	//	//	_, err = ackPacket.WriteTo(conn, cfg.ByteOrder)
+	//	//	if err != nil {
+	//	//		return nil, err
+	//	//	}
+	//	//	if cfg.WriteTimeout != 0 {
+	//	//		_ = conn.SetWriteDeadline(time.Time{})
+	//	//	}
+	//	//
+	//	//	return NewConnection(conn, cfg), nil
+	//	//}
+}
+
 // import (
 //
 //	"encoding/binary"
@@ -59,40 +133,7 @@ package network
 //
 //	return NewConnection(conn, cfg), nil
 //}
-//
-//// Accept 接收客户端连接
-//func Accept(conn net.Conn, cfg *ConnectionConfig) (Connection, error) {
-//	// read connect packet
-//	if cfg.ReadTimeout != 0 {
-//		_ = conn.SetReadDeadline(time.Now().Add(cfg.ReadTimeout))
-//	}
-//	msg, err := ReadPacket(conn, cfg.ByteOrder)
-//	if err != nil {
-//		return nil, err
-//	}
-//	packet, ok := msg.(*ConnectPacket)
-//	if !ok {
-//		return nil, err
-//	}
-//	cfg.Version = packet.ProtocolVersion
-//	cfg.KeepaliveInterval = packet.Keepalive
-//	cfg.ConnectionID = packet.ClientIdentifier
-//
-//	// send connect_ack packet
-//	ackPacket := NewControlPacket(ConnectAck).(*ConnectAckPacket)
-//	if cfg.WriteTimeout != 0 {
-//		_ = conn.SetWriteDeadline(time.Now().Add(cfg.WriteTimeout))
-//	}
-//	_, err = ackPacket.WriteTo(conn, cfg.ByteOrder)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if cfg.WriteTimeout != 0 {
-//		_ = conn.SetWriteDeadline(time.Time{})
-//	}
-//
-//	return NewConnection(conn, cfg), nil
-//}
+
 //
 //type connection struct {
 //	net.Conn

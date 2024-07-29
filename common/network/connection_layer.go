@@ -15,7 +15,7 @@ var (
 	TReadTimeoutWaitInterval = 20 * time.Microsecond
 )
 
-type TcpConnFactory func(ctx context.Context) *net.TCPConn
+type TcpConnFactory func(ctx context.Context, readTimeout, writeTimeout time.Duration, byteOrder binary.ByteOrder) *net.TCPConn
 
 type TcpConnectionKeeper struct {
 	connID         string
@@ -37,7 +37,7 @@ type TcpConnectionKeeper struct {
 	lock sync.RWMutex
 }
 
-func NewTcpConnectionKeeper(ctx context.Context, cfg *Config, tcpConnFactory TcpConnFactory) *TcpConnectionKeeper {
+func NewTcpConnectionKeeper(ctx context.Context, cfg *ConnectionLayerConfig, tcpConnFactory TcpConnFactory) *TcpConnectionKeeper {
 	instance := &TcpConnectionKeeper{
 		connID:         cfg.ConnectionID,
 		version:        cfg.Version,
@@ -65,7 +65,7 @@ func (gs *TcpConnectionKeeper) loop() {
 		return
 	}
 
-	tcpConn := gs.tcpConnFactory(gs.ctx)
+	tcpConn := gs.tcpConnFactory(gs.ctx, gs.readTimeout, gs.writeTimeout, gs.byteOrder)
 	if tcpConn == nil {
 		gslog.Error("[TcpConnectionKeeper] tcp connection keeper loop fail for create tcp conn", "connID", gs.connID)
 		return
@@ -83,7 +83,7 @@ func (gs *TcpConnectionKeeper) loop() {
 			if gs.IsClosed() {
 				break
 			}
-			tcpConn = gs.tcpConnFactory(gs.ctx)
+			tcpConn = gs.tcpConnFactory(gs.ctx, gs.readTimeout, gs.writeTimeout, gs.byteOrder)
 		}
 	}()
 }

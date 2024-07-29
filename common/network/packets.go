@@ -148,7 +148,7 @@ func (gs *ConnectPacket) Validate() int {
 		return RefusedInvalidIdentifier
 	}
 
-	return 0
+	return Accepted
 }
 
 func (gs *ConnectPacket) String() string {
