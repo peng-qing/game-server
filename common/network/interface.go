@@ -3,7 +3,11 @@ package network
 import (
 	"encoding/binary"
 	"io"
+	"net"
 )
+
+// ConnectionHook 新建连接的钩子函数
+type ConnectionHook func(conn net.Conn) error
 
 type (
 	// ApplicationLayer 应用层
@@ -25,8 +29,10 @@ type (
 
 	// ConnectionLayer 连接层
 	ConnectionLayer interface {
-		//// ConnectionID 连接ID
-		//ConnectionID() string
+		// ConnectionID 连接ID
+		ConnectionID() string
+		// GetConnectionHook 获取一个新建立连接的钩子函数
+		GetConnectionHook() ConnectionHook
 		//Read() chan ControlPacket
 		//ReadPacket() ControlPacket
 		//Write(ctx context.Context, packet ControlPacket) error

@@ -13,9 +13,11 @@ import (
 
 var (
 	TReadTimeoutWaitInterval = 20 * time.Microsecond
+
+	ErrNotSameConnectionID = errors.New("not the same connection identify")
 )
 
-type TcpConnFactory func(ctx context.Context, readTimeout, writeTimeout time.Duration, byteOrder binary.ByteOrder) *net.TCPConn
+type TcpConnFactory func(ctx context.Context, hook ConnectionHook) *net.TCPConn
 
 type TcpConnectionKeeper struct {
 	connID         string
@@ -65,7 +67,7 @@ func (gs *TcpConnectionKeeper) loop() {
 		return
 	}
 
-	tcpConn := gs.tcpConnFactory(gs.ctx, gs.readTimeout, gs.writeTimeout, gs.byteOrder)
+	tcpConn := gs.tcpConnFactory(gs.ctx, gs.GetConnectionHook())
 	if tcpConn == nil {
 		gslog.Error("[TcpConnectionKeeper] tcp connection keeper loop fail for create tcp conn", "connID", gs.connID)
 		return
@@ -83,7 +85,7 @@ func (gs *TcpConnectionKeeper) loop() {
 			if gs.IsClosed() {
 				break
 			}
-			tcpConn = gs.tcpConnFactory(gs.ctx, gs.readTimeout, gs.writeTimeout, gs.byteOrder)
+			tcpConn = gs.tcpConnFactory(gs.ctx, gs.GetConnectionHook())
 		}
 	}()
 }
@@ -228,5 +230,53 @@ func (gs *TcpConnectionKeeper) writeLoop(ctx context.Context, conn *net.TCPConn)
 			}
 			gslog.Trace("[TcpConnectionKeeper] writeLoop sender", "connID", gs.connID, "packet", packet.String())
 		}
+	}
+}
+
+func (gs *TcpConnectionKeeper) ConnectionID() string {
+	gs.lock.RLock()
+	defer gs.lock.RUnlock()
+	return gs.connID
+}
+
+func (gs *TcpConnectionKeeper) GetConnectionHook() ConnectionHook {
+	return func(conn net.Conn) error {
+		// read connect packet
+		if gs.readTimeout > 0 {
+			_ = conn.SetReadDeadline(time.Now().Add(gs.readTimeout))
+		}
+		msg, err := ReadPacket(conn, gs.byteOrder)
+		if err != nil {
+			return err
+		}
+		if gs.readTimeout > 0 {
+			_ = conn.SetReadDeadline(time.Time{})
+		}
+		packet, ok := msg.(*ConnectPacket)
+		if !ok || packet.Validate() != Accepted {
+			return err
+		}
+		if gs.ConnectionID() != packet.ClientIdentifier {
+			return ErrNotSameConnectionID
+		}
+		gs.lock.Lock()
+		gs.version = packet.ProtocolVersion
+		gs.keepalive = time.Duration(packet.Keepalive)
+		gs.lock.Unlock()
+
+		// send connection ack packet
+		ackPacket := NewControlPacket(ConnectAck).(*ConnectAckPacket)
+		if gs.writeTimeout > 0 {
+			_ = conn.SetWriteDeadline(time.Now().Add(gs.writeTimeout))
+		}
+		_, err = ackPacket.WriteTo(conn, gs.byteOrder)
+		if err != nil {
+			return err
+		}
+		if gs.writeTimeout > 0 {
+			_ = conn.SetWriteDeadline(time.Time{})
+		}
+
+		return nil
 	}
 }
