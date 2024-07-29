@@ -17,11 +17,11 @@ func NewJsonPresentation() PresentationLayer {
 	return &JsonPresentation{}
 }
 
-func (j JsonPresentation) Decode(src []byte, dst any) error {
+func (gs JsonPresentation) Decode(src []byte, dst any) error {
 	return json.Unmarshal(src, dst)
 }
 
-func (j JsonPresentation) Encode(src any) (dst []byte, err error) {
+func (gs JsonPresentation) Encode(src any) (dst []byte, err error) {
 	return json.Marshal(src)
 }
 
@@ -32,12 +32,12 @@ func NewPBPresentation() PresentationLayer {
 	return &PBPresentation{}
 }
 
-func (P PBPresentation) Decode(src []byte, dst any) error {
+func (gs PBPresentation) Decode(src []byte, dst any) error {
 	// must pb.Message
 	return proto.Unmarshal(src, dst.(proto.Message))
 }
 
-func (P PBPresentation) Encode(src any) (dst []byte, err error) {
+func (gs PBPresentation) Encode(src any) (dst []byte, err error) {
 	switch vv := src.(type) {
 	case []byte:
 		return vv, err

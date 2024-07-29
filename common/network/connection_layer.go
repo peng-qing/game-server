@@ -1,84 +1,107 @@
 package network
 
 import (
-	"GameServer/gslog"
 	"context"
+	"encoding/binary"
+	"errors"
+	"net"
 	"sync"
 	"time"
+
+	"GameServer/gslog"
 )
 
+var (
+	TReadTimeoutWaitInterval = 20 * time.Microsecond
+)
+
+type TcpConnFactory func(ctx context.Context) *net.TCPConn
+
 type TcpConnectionKeeper struct {
-	connectionID string
-	ctx          context.Context
-	cancel       context.CancelFunc
-	stopChan     chan struct{}
-	readChan     chan ControlPacket
-	writeChan    chan ControlPacket
-	closed       bool
-	lock         sync.RWMutex
+	connID         string
+	version        int
+	keepalive      time.Duration
+	byteOrder      binary.ByteOrder
+	writeTimeout   time.Duration
+	readTimeout    time.Duration
+	tcpConnFactory TcpConnFactory
+
+	stopChan  chan struct{}
+	closed    bool
+	readChan  chan ControlPacket
+	writeChan chan ControlPacket
+
+	ctx       context.Context
+	ctxCancel context.CancelFunc
+
+	lock sync.RWMutex
 }
 
-func NewTcpConnectionKeeper(ctx context.Context, connFactory func(ctx context.Context) Connection) *TcpConnectionKeeper {
+func NewTcpConnectionKeeper(ctx context.Context, cfg *Config, tcpConnFactory TcpConnFactory) *TcpConnectionKeeper {
 	instance := &TcpConnectionKeeper{
-		stopChan:  make(chan struct{}),
-		readChan:  make(chan ControlPacket),
-		writeChan: make(chan ControlPacket),
-		closed:    false,
+		connID:         cfg.ConnectionID,
+		version:        cfg.Version,
+		keepalive:      time.Duration(cfg.KeepaliveInterval),
+		byteOrder:      cfg.ByteOrder,
+		writeTimeout:   cfg.WriteTimeout,
+		readTimeout:    cfg.ReadTimeout,
+		tcpConnFactory: tcpConnFactory,
+		stopChan:       make(chan struct{}),
+		readChan:       make(chan ControlPacket),
+		writeChan:      make(chan ControlPacket),
 	}
-	instance.ctx, instance.cancel = context.WithCancel(ctx)
 
-	instance.loop(connFactory)
+	instance.ctx, instance.ctxCancel = context.WithCancel(ctx)
+
+	// call loop in this ?
+	instance.loop()
 
 	return instance
 }
 
-func (gs *TcpConnectionKeeper) loop(connFactory func(ctx context.Context) Connection) {
-	conn := connFactory(gs.ctx)
-	if conn == nil {
+func (gs *TcpConnectionKeeper) loop() {
+	if gs.connID == "" {
+		gslog.Error("[TcpConnectionKeeper] tcp connection keeper loop fail for invalid cid", "connID", gs.connID)
 		return
 	}
-	gs.connectionID = conn.ConnectionID()
+
+	tcpConn := gs.tcpConnFactory(gs.ctx)
+	if tcpConn == nil {
+		gslog.Error("[TcpConnectionKeeper] tcp connection keeper loop fail for create tcp conn", "connID", gs.connID)
+		return
+	}
 
 	go func() {
 		defer func() {
 			close(gs.readChan)
 			close(gs.writeChan)
 			close(gs.stopChan)
-			gs.cancel()
+			gs.ctxCancel()
 		}()
 		for {
-			gs.start(conn)
-			if gs.isClosed() {
+			gs.start(tcpConn)
+			if gs.IsClosed() {
 				break
 			}
-			conn = connFactory(gs.ctx)
+			tcpConn = gs.tcpConnFactory(gs.ctx)
 		}
 	}()
 }
 
-func (gs *TcpConnectionKeeper) start(conn Connection) {
-	defer conn.Close()
-	connectionID := conn.ConnectionID()
-	if gs.connectionID != "" && gs.connectionID != connectionID {
-		gslog.Critical("[TcpConnectionKeeper] invalid connection id", "connectionID", connectionID)
-		return
-	}
-	gs.connectionID = connectionID
-	heartbeatRspChan := make(chan ControlPacket)
-	defer close(heartbeatRspChan)
+func (gs *TcpConnectionKeeper) start(tcpConn *net.TCPConn) {
+	defer tcpConn.Close()
 
+	heartbeatChan := make(chan ControlPacket)
 	taskCtx, taskCtxCancel := context.WithCancel(gs.ctx)
 	defer taskCtxCancel()
 
 	wg := sync.WaitGroup{}
-
-	heartbeat := conn.Heartbeat()
-	if heartbeat > 0 {
+	if gs.keepalive > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer taskCtxCancel()
-			gs.keepaliveLoop(taskCtx, heartbeat, heartbeatRspChan)
+			gs.keepaliveLoop(taskCtx, tcpConn, gs.keepalive, heartbeatChan)
 		}()
 	}
 
@@ -86,68 +109,124 @@ func (gs *TcpConnectionKeeper) start(conn Connection) {
 	go func() {
 		defer wg.Done()
 		defer taskCtxCancel()
-		gs.readLoop(taskCtx, conn, heartbeatRspChan)
+		gs.readLoop(taskCtx, tcpConn, heartbeatChan)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer taskCtxCancel()
-		gs.writeLoop(taskCtx, conn)
+		gs.writeLoop(taskCtx, tcpConn)
 	}()
-
-	wg.Wait()
 }
 
-func (gs *TcpConnectionKeeper) readLoop(ctx context.Context, conn Connection, heartbeatRspChan chan ControlPacket) {
-
+func (gs *TcpConnectionKeeper) IsClosed() bool {
+	gs.lock.RLock()
+	defer gs.lock.RUnlock()
+	return gs.closed
 }
 
-func (gs *TcpConnectionKeeper) writeLoop(ctx context.Context, conn Connection) {
-
-}
-
-func (gs *TcpConnectionKeeper) keepaliveLoop(ctx context.Context, heartbeat time.Duration, heartbeatRspChan chan ControlPacket) {
-	ticker := time.NewTicker(heartbeat)
+func (gs *TcpConnectionKeeper) keepaliveLoop(ctx context.Context, conn *net.TCPConn, hbInterval time.Duration, heartbeatChan chan ControlPacket) {
+	ticker := time.NewTicker(hbInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
-			
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			// heartbeat req
+			packet := NewControlPacket(Heartbeat)
+			select {
+			case gs.writeChan <- packet:
+				hbCtx, hbCtxCancel := context.WithCancel(ctx)
+				select {
+				case <-hbCtx.Done():
+					hbCtxCancel()
+					gslog.Error("[TcpConnectionKeeper] connect heartbeat timeout", "connID", gs.connID, "heartbeat", hbInterval)
+					return
+				case heartbeatChan <- packet:
+					hbCtxCancel()
+				}
+			}
 		}
 	}
 }
 
-func (gs *TcpConnectionKeeper) isClosed() bool {
-	gs.lock.RLock()
-	defer gs.lock.RUnlock()
-
-	return gs.closed
+func (gs *TcpConnectionKeeper) readLoop(ctx context.Context, conn *net.TCPConn, heartbeatChan chan ControlPacket) {
+	for {
+		if gs.readTimeout > 0 {
+			_ = conn.SetReadDeadline(time.Now().Add(gs.readTimeout))
+		}
+		packet, err := ReadPacket(conn, gs.byteOrder)
+		if err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				time.Sleep(TReadTimeoutWaitInterval)
+				continue
+			}
+			break
+		}
+		if gs.readTimeout > 0 {
+			_ = conn.SetReadDeadline(time.Time{})
+		}
+		gslog.Trace("[TcpConnectionKeeper] readLoop receiver", "connID", gs.connID, "packet", packet.String())
+		switch msg := packet.(type) {
+		case *HeartbeatPacket:
+			// send heartbeat ack
+			ackPacket := NewControlPacket(HeartbeatAck)
+			select {
+			case gs.writeChan <- ackPacket:
+			case <-ctx.Done():
+				return
+			}
+		case *HeartbeatAckPacket:
+			// dispatch to heartbeat channel
+			select {
+			case heartbeatChan <- packet:
+			case <-ctx.Done():
+				return
+			}
+		case *DisConnectPacket:
+			return
+		default:
+			select {
+			case <-ctx.Done():
+				return
+			case gs.readChan <- msg:
+			}
+		}
+	}
+	return
 }
 
-func (gs *TcpConnectionKeeper) ConnectionID() string {
-	return gs.connectionID
-}
-
-func (gs *TcpConnectionKeeper) Read() chan ControlPacket {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (gs *TcpConnectionKeeper) ReadPacket() ControlPacket {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (gs *TcpConnectionKeeper) Write(ctx context.Context, packet ControlPacket) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (gs *TcpConnectionKeeper) Close() error {
-	//TODO implement me
-	panic("implement me")
+func (gs *TcpConnectionKeeper) writeLoop(ctx context.Context, conn *net.TCPConn) {
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case packet, ok := <-gs.writeChan:
+			if !ok {
+				// channel close
+				break
+			}
+			if gs.writeTimeout > 0 {
+				_ = conn.SetWriteDeadline(time.Now().Add(gs.writeTimeout))
+			}
+			_, err = packet.WriteTo(conn, gs.byteOrder)
+			if err != nil {
+				var netErr net.Error
+				if errors.As(err, &netErr) && netErr.Timeout() {
+					time.Sleep(TReadTimeoutWaitInterval)
+					continue
+				}
+				return
+			}
+			if gs.writeTimeout > 0 {
+				_ = conn.SetWriteDeadline(time.Time{})
+			}
+			gslog.Trace("[TcpConnectionKeeper] writeLoop sender", "connID", gs.connID, "packet", packet.String())
+		}
+	}
 }

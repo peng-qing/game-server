@@ -44,6 +44,7 @@ var (
 	ErrInvalidPacketType        = errors.New("invalid packet type")
 	ErrBadProtocolVersion       = errors.New("connection refused: bad protocol version")
 	ErrRefusedInvalidIdentifier = errors.New("connection refused: invalid client identifier")
+	ErrReadExpectedDataFailed   = errors.New("read expected data failed")
 
 	RetCodeErrors = map[int]error{
 		Accepted:                  nil,
@@ -397,4 +398,34 @@ func (gs *PublishAckPacket) WriteTo(w io.Writer, order binary.ByteOrder) (int64,
 	}
 	n, err := w.Write(data)
 	return int64(n), err
+}
+
+func ReadPacket(r io.Reader, order binary.ByteOrder) (ControlPacket, error) {
+	var fixedHeader FixedHeader
+	var err error
+	buf := make([]byte, 1)
+
+	if _, err = io.ReadFull(r, buf); err != nil {
+		return nil, err
+	}
+	err = fixedHeader.UnPack(PacketType(buf[0]), r)
+	if err != nil {
+		return nil, err
+	}
+	packet, err := NewControlPacketWithHeader(fixedHeader)
+	if err != nil {
+		return nil, err
+	}
+	bodySize := make([]byte, fixedHeader.RemainLength)
+	n, err := io.ReadFull(r, bodySize)
+	if err != nil {
+		return nil, err
+	}
+	if n != fixedHeader.RemainLength {
+		return nil, ErrReadExpectedDataFailed
+	}
+
+	err = packet.Unpack(r, order)
+
+	return packet, err
 }
