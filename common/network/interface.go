@@ -1,13 +1,11 @@
 package network
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
-	"net"
+	"time"
 )
-
-// ConnectionHook 新建连接的钩子函数
-type ConnectionHook func(conn net.Conn) error
 
 type (
 	// ApplicationLayer 应用层
@@ -31,24 +29,33 @@ type (
 	ConnectionLayer interface {
 		// ConnectionID 连接ID
 		ConnectionID() string
-		// GetConnectionHook 获取一个新建立连接的钩子函数
-		GetConnectionHook() ConnectionHook
-		//Read() chan ControlPacket
-		//ReadPacket() ControlPacket
-		//Write(ctx context.Context, packet ControlPacket) error
-		//Close() error
+		// Close 关闭
+		Close() error
+		// Read 收包队列
+		Read() chan ControlPacket
+		// ReadPacket 读取单个包
+		ReadPacket() ControlPacket
+		// WritePacket 写入包
+		WritePacket(ctx context.Context, packet ControlPacket) error
 	}
 
-	////Connection 连接抽象封装
-	//Connection interface {
-	//	net.Conn
-	//	// ConnectionID 连接标识
-	//	ConnectionID() string
-	//	// Heartbeat 心跳时间
-	//	Heartbeat() time.Duration
-	//	//ReadPacket() ControlPacket
-	//	//WritePacket(ctx context.Context, packet ControlPacket) error
-	//}
+	//ConnectionBroker 连接代理
+	ConnectionBroker interface {
+		// ConnectionID 连接ID
+		ConnectionID() string
+		// Keepalive 心跳时间
+		Keepalive() time.Duration
+		// WritePacket 发包
+		WritePacket(packet ControlPacket) error
+		// ReadPacket 读取单个包
+		ReadPacket() (ControlPacket, error)
+		// LocalAddr 本地地址
+		LocalAddr() string
+		// RemoteAddr 远端地址
+		RemoteAddr() string
+		// Close 关闭
+		Close() error
+	}
 
 	// ControlPacket 连接层控制报文
 	ControlPacket interface {
