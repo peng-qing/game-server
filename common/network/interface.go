@@ -8,6 +8,10 @@ import (
 )
 
 type (
+	OnConnectionCloseCallback func(connectionID string)
+)
+
+type (
 	// ApplicationLayer 应用层
 	// 最顶层业务 表示一个服务
 	ApplicationLayer interface {

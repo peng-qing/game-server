@@ -1,5 +1,54 @@
 package network
 
+import (
+	"net"
+	"time"
+)
+
+type Broker struct {
+	conn          net.Conn
+	connectionID  string
+	version       int
+	keepalive     time.Duration
+	readTimeout   time.Duration
+	writeTimeout  time.Duration
+	closeCallback OnConnectionCloseCallback
+}
+
+func (gs *Broker) ConnectionID() string {
+	return gs.connectionID
+}
+
+func (gs *Broker) Keepalive() time.Duration {
+	return gs.keepalive
+}
+
+func (gs *Broker) WritePacket(packet ControlPacket) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (gs *Broker) ReadPacket() (ControlPacket, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (gs *Broker) LocalAddr() string {
+	return gs.conn.LocalAddr().String()
+}
+
+func (gs *Broker) RemoteAddr() string {
+	return gs.conn.RemoteAddr().String()
+}
+
+func (gs *Broker) Close() error {
+	err := gs.conn.Close()
+	if err == nil && gs.closeCallback != nil {
+		gs.closeCallback(gs.connectionID)
+	}
+	return err
+}
+
 //func AcceptTcpConn(cfg *ConnectionConfig) (TcpConnFactory, error) {
 //	addr, err := net.ResolveTCPAddr(cfg.IPVersion, fmt.Sprintf("%s:%d", cfg.IP, cfg.Port))
 //	if err != nil {

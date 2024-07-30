@@ -175,3 +175,22 @@ func DecodeReaderString(r io.Reader, order binary.ByteOrder) (string, error) {
 	buf, err := DecodeReaderBytes(r, order)
 	return string(buf), err
 }
+
+// EncodeZigzag 以zigzag方式映射负整数到正整数范围
+// 其算法为: (i<<1)^(i>>31)
+// (i<<1) 消去符号位 低位补0
+// (i>>31) 将符号位移动到最低位 高位补0
+// 所以 -1 映射成了1 1映射成立2 ....
+// 这样就解决了小的负整数压缩率太低的问题 从而可以使用变长编码了
+func EncodeZigzag(number int) []byte {
+	number = (number << 1) ^ (number >> 31)
+	return EncodeVariableInt(int64(number))
+}
+
+func DecodeZigzag(b []byte) (int, error) {
+	number, err := DecodeVariableInt(b)
+	if err != nil {
+		return 0, err
+	}
+	return (number >> 1) ^ -(number & 1), nil
+}
