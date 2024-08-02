@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"net"
 	"time"
 )
 
 type (
 	OnConnectionCloseCallback func(connectionID string)
+	ConnectionBrokerFactory   func(conn net.Conn, cfg *BrokerConf)
 )
 
 type (
@@ -37,8 +39,6 @@ type (
 		Close() error
 		// Read 收包队列
 		Read() chan ControlPacket
-		// ReadPacket 读取单个包
-		ReadPacket() ControlPacket
 		// WritePacket 写入包
 		WritePacket(ctx context.Context, packet ControlPacket) error
 	}

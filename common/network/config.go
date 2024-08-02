@@ -1,13 +1,33 @@
 package network
 
+import (
+	"encoding/binary"
+	"errors"
+	"net"
+	"time"
+)
+
+type BrokerConf struct {
+	ConnectionID      string
+	KeepaliveInterval int
+	Version           int
+	WriteTimeout      time.Duration
+	ReadTimeout       time.Duration
+	ByteOrder         binary.ByteOrder
+	OnCloseCallback   OnConnectionCloseCallback
+}
+
+func IsNetTimeout(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
 //
 //type ConnectionLayerConfig struct {
-//	ConnectionID      string
-//	KeepaliveInterval int
-//	Version           int
-//	WriteTimeout      time.Duration
-//	ReadTimeout       time.Duration
-//	ByteOrder         binary.ByteOrder
+
 //}
 //
 //type ConnectionConfig struct {

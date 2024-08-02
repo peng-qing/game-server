@@ -182,11 +182,16 @@ func DecodeReaderString(r io.Reader, order binary.ByteOrder) (string, error) {
 // (i>>31) 将符号位移动到最低位 高位补0
 // 所以 -1 映射成了1 1映射成立2 ....
 // 这样就解决了小的负整数压缩率太低的问题 从而可以使用变长编码了
+// 注意 其有效编码访问: 2^31-1
 func EncodeZigzag(number int) []byte {
 	number = (number << 1) ^ (number >> 31)
 	return EncodeVariableInt(int64(number))
 }
 
+// DecodeZigzag 解码
+// i >> 1 去掉低位符号位 高位补0
+// i & 1 保留低位符号位 再取反转负 对于符号位为1 结果为-1 符号位0 结果为0
+// 再进行异或 可以将符号位还原回去得到最终的数
 func DecodeZigzag(b []byte) (int, error) {
 	number, err := DecodeVariableInt(b)
 	if err != nil {
